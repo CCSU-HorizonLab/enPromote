@@ -110,3 +110,157 @@ input:focus {
 .error-message.visible {
     display: block;
 }
+
+/* 密码包装器与切换按钮 */
+.password-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+.password-input-wrapper input {
+    padding-right: 40px; /* 留出右侧眼睛图标的空间 */
+}
+
+.password-toggle-btn {
+    position: absolute;
+    right: 12px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #999;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease;
+}
+
+.password-toggle-btn:hover {
+    color: #3498db;
+}
+
+.password-toggle-btn svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+}
+
+/* 输入框校验状态 */
+.form-group input.is-invalid {
+    border-color: #e74c3c;
+    background-color: #fdf2f2;
+}
+
+.form-group input.is-invalid:focus {
+    border-color: #e74c3c;
+    box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.2);
+}
+
+/* 错误提示 */
+.error-feedback {
+    color: #e74c3c;
+    font-size: 12px;
+    margin-top: 5px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    animation: fadeIn 0.2s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* 密码强度指示器 */
+.password-strength-container {
+    margin-top: 8px;
+    padding: 8px 10px;
+    background-color: #fcfcfc;
+    border: 1px solid #eee;
+    border-radius: 4px;
+}
+
+.password-strength-text {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.password-strength-text span.strength-label {
+    font-weight: bold;
+    transition: color 0.3s ease;
+}
+
+.password-strength-text span.strength-label.weak {
+    color: #e74c3c;
+}
+
+.password-strength-text span.strength-label.medium {
+    color: #f39c12;
+}
+
+.password-strength-text span.strength-label.strong {
+    color: #2ecc71;
+}
+
+.password-strength-bars {
+    display: flex;
+    gap: 6px;
+    height: 4px;
+}
+
+.strength-bar {
+    flex: 1;
+    background-color: #e0e0e0;
+    border-radius: 2px;
+    transition: background-color 0.3s ease;
+}
+
+/* 强度激活颜色 */
+.strength-bar.weak {
+    background-color: #e74c3c;
+}
+
+.strength-bar.medium {
+    background-color: #f39c12;
+}
+
+.strength-bar.strong {
+    background-color: #2ecc71;
+}
+
+/* 按钮加载状态与禁用状态 */
+.btn-primary:disabled {
+    background-color: #bdc3c7;
+    cursor: not-allowed;
+    opacity: 0.8;
+}
+
+.btn-primary:disabled:hover {
+    background-color: #bdc3c7;
+}
+
+.btn-primary .btn-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #ffffff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
