@@ -145,20 +145,20 @@ async function getWordFromApi(word, wordSence) {
                 } else {
                     // 如果在当前场景找不到，尝试在所有场景中查找
                     console.log(`在场景 ${sence} 中未找到单词 ${word}，尝试在所有场景中查找`);
-                    
+
                     const allScenes = ['A', 'B']; // 根据CET-4.json实际场景
                     let foundInOtherScene = false;
-                    
+
                     for (const scene of allScenes) {
                         if (scene === sence) continue; // 跳过已经查找过的场景
-                        
+
                         const sceneWords = await loadCet4WordsByInitial(scene);
                         const wordInScene = sceneWords.find(item =>
                             typeof item === 'object' &&
                             item.word &&
                             item.word.toLowerCase() === word.toLowerCase()
                         );
-                        
+
                         if (wordInScene && wordInScene.mean) {
                             mergedData.chineseMeaning = wordInScene.mean;
                             console.log(`在场景 ${scene} 中找到单词 ${word} 的中文释义: ${wordInScene.mean}`);
@@ -166,7 +166,7 @@ async function getWordFromApi(word, wordSence) {
                             break;
                         }
                     }
-                    
+
                     if (!foundInOtherScene) {
                         console.log(`在所有场景中都未找到单词 ${word} 的中文释义`);
                     }
@@ -228,7 +228,7 @@ router.get('/getwordinfo', async (req, res) => {
 
     // 安全地获取用户场景，添加默认值和错误处理
     let userSence = 'A'; // 默认场景
-    
+
     try {
         if (user.cet4 && user.cet4.position && typeof user.cet4.position === 'string') {
             const positionParts = user.cet4.position.split(':');

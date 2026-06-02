@@ -45,7 +45,7 @@ const SALT_ROUNDS = 10;
 
 // 判断是否为 bcrypt 哈希（格式 $2a$、$2b$、$2y$）
 function isBcryptHash(str) {
-  return typeof str === 'string' && /^\$2[aby]\$\d{2}\$/.test(str);
+    return typeof str === 'string' && /^\$2[aby]\$\d{2}\$/.test(str);
 }
 router.post('/login', async (req, res) => {
     let username, password;
