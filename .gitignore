@@ -29,4 +29,4 @@ server/logs/access.log
 server/logs/combined.log
 server/logs/error.log
 server/email_test.js
-
+en_ui/
