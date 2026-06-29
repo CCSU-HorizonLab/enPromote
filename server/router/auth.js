@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const User = require('../modules/User');
 const { logger, logApiError, logUserAction } = require('../utils/logger');
+const verificationCodeService = require('../services/verificationCodeService');
 const router = express.Router();
 
 // 配置头像上传
@@ -47,6 +48,246 @@ const SALT_ROUNDS = 10;
 function isBcryptHash(str) {
   return typeof str === 'string' && /^\$2[aby]\$\d{2}\$/.test(str);
 }
+// 忘记密码 - 验证验证码并返回重置页面
+router.post('/forgot-password', async (req, res) => {
+    try {
+        const { contact, verificationCode } = req.body;
+
+        if (!contact || !verificationCode) {
+            return res.json({ code: 400, message: '联系方式和验证码不能为空' });
+        }
+
+        // 验证联系方式格式
+        const isEmail = contact.includes('@');
+        const isPhone = /^1[3-9]\d{9}$/.test(contact);
+
+        if (!isEmail && !isPhone) {
+            return res.json({ code: 400, message: '请输入有效的邮箱或手机号' });
+        }
+
+        // 验证验证码
+        const verifyResult = await verificationCodeService.verifyCode(contact, verificationCode);
+        if (!verifyResult.success) {
+            return res.json({ code: 400, message: verifyResult.message });
+        }
+
+        // 查找用户
+        const user = await User.findOne({
+            $or: [
+                { email: contact },
+                { phone: contact }
+            ]
+        });
+
+        if (!user) {
+            return res.json({ code: 400, message: '该联系方式未注册' });
+        }
+
+        // 生成一个简单的token（在实际项目中应该使用JWT等安全方式）
+        const token = Buffer.from(contact + ':' + Date.now()).toString('base64');
+
+        logUserAction(req, 'VERIFY_CODE_FORGOT_PASSWORD', { contact });
+        logger.info(`用户 ${contact} 验证验证码成功，准备重置密码`);
+
+        // 返回重置密码页面链接
+        return res.json({ 
+            code: 200, 
+            message: '验证成功，请设置新密码',
+            data: {
+                resetUrl: `/auth/reset-password?token=${token}`,
+                contact: contact
+            }
+        });
+    } catch (error) {
+        logApiError(req, error, 500);
+        return res.json({ code: 500, message: '服务器内部错误' });
+    }
+});
+
+// 重置密码 - 实际更新密码
+router.post('/reset-password', async (req, res) => {
+    try {
+        const { token, newPassword } = req.body;
+
+        if (!token || !newPassword) {
+            return res.json({ code: 400, message: '令牌和新密码不能为空' });
+        }
+
+        // 解析token获取联系方式（简化版，实际项目中应该使用JWT等安全方式）
+        try {
+            const decoded = Buffer.from(token, 'base64').toString('utf-8');
+            const [contact] = decoded.split(':');
+
+            // 验证联系方式格式
+            const isEmail = contact.includes('@');
+            const isPhone = /^1[3-9]\d{9}$/.test(contact);
+
+            if (!isEmail && !isPhone) {
+                return res.json({ code: 400, message: '无效的令牌' });
+            }
+
+            // 查找用户
+            const user = await User.findOne({
+                $or: [
+                    { email: contact },
+                    { phone: contact }
+                ]
+            });
+
+            if (!user) {
+                return res.json({ code: 400, message: '该联系方式未注册' });
+            }
+
+            // 更新密码
+            const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+            user.password = hashedPassword;
+            await user.save();
+
+            logUserAction(req, 'RESET_PASSWORD_SUCCESS', { contact });
+            logger.info(`用户 ${contact} 重置密码成功`);
+
+            return res.json({ code: 200, message: '密码重置成功' });
+        } catch (error) {
+            return res.json({ code: 400, message: '无效的令牌' });
+        }
+    } catch (error) {
+        logApiError(req, error, 500);
+        return res.json({ code: 500, message: '服务器内部错误' });
+    }
+});
+
+// 忘记密码页面
+router.get('/forgot-password', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/forgot-password.html'));
+});
+
+// 获取重置密码页面
+router.get('/reset-password', (req, res) => {
+    const { token } = req.query;
+
+    if (!token) {
+        return res.status(400).send('缺少重置令牌');
+    }
+
+    // 在实际项目中，这里应该验证令牌的有效性
+    // 简化版直接渲染重置密码页面
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="zh-CN">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>重置密码 - 英语学习平台</title>
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+            <style>
+                body {
+                    background-color: #f8f9fa;
+                    padding-top: 50px;
+                }
+                .reset-password-container {
+                    max-width: 400px;
+                    margin: 0 auto;
+                    background-color: white;
+                    padding: 30px;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+                }
+                .form-title {
+                    text-align: center;
+                    margin-bottom: 20px;
+                    color: #333;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="reset-password-container">
+                    <h2 class="form-title">重置密码</h2>
+                    <form id="resetPasswordForm">
+                        <input type="hidden" id="token" value="${token}">
+                        <div class="mb-3">
+                            <label for="newPassword" class="form-label">新密码</label>
+                            <input type="password" class="form-control" id="newPassword" required>
+                            <div class="form-text">密码长度至少为6个字符</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="confirmPassword" class="form-label">确认密码</label>
+                            <input type="password" class="form-control" id="confirmPassword" required>
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">重置密码</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+            <script>
+                document.getElementById('resetPasswordForm').addEventListener('submit', async function(e) {
+                    e.preventDefault();
+
+                    const token = document.getElementById('token').value;
+                    const newPassword = document.getElementById('newPassword').value;
+                    const confirmPassword = document.getElementById('confirmPassword').value;
+
+                    if (newPassword !== confirmPassword) {
+                        alert('两次输入的密码不一致');
+                        return;
+                    }
+
+                    if (newPassword.length < 6) {
+                        alert('密码长度至少为6个字符');
+                        return;
+                    }
+
+                    try {
+                        // 直接调用重置密码API
+                        const resetResponse = await fetch('/auth/reset-password', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                token: token,
+                                newPassword: newPassword
+                            })
+                        });
+
+                        const resetData = await resetResponse.json();
+
+                        if (resetData.code === 200) {
+                            alert('密码重置成功，请使用新密码登录');
+                            window.location.href = '/login';
+                        } else {
+                            alert('密码重置失败: ' + resetData.message);
+                        }
+                    } catch (error) {
+                        console.error('重置密码失败:', error);
+                        alert('重置密码失败，请稍后重试');
+                    }
+                });
+            </script>
+        </body>
+        </html>
+    `);
+});
+
+// 获取联系方式（简化版，实际项目中应该从token中解析）
+router.get('/get-contact-from-token', (req, res) => {
+    const { token } = req.query;
+
+    // 在实际项目中，这里应该解析token并返回联系方式
+    // 简化版直接返回模拟数据
+    res.json({
+        code: 200,
+        message: '获取联系方式成功',
+        data: {
+            contact: 'test@example.com',
+            verificationCode: '123456'
+        }
+    });
+});
+
 router.post('/login', async (req, res) => {
     let username, password;
     try {
@@ -103,12 +344,126 @@ router.post('/login', async (req, res) => {
     }
 });
 
+// 发送验证码
+router.post('/send-code', async (req, res) => {
+    try {
+        const { contact, type } = req.body;
+
+        if (!contact || !type) {
+            return res.json({ code: 400, message: '联系方式和验证码类型不能为空' });
+        }
+
+        // 验证联系方式格式
+        const isEmail = contact.includes('@');
+        const isPhone = /^1[3-9]\d{9}$/.test(contact);
+
+        if (!isEmail && !isPhone) {
+            return res.json({ code: 400, message: '请输入有效的邮箱或手机号' });
+        }
+
+        // 检查验证码类型
+        if (type !== 'register' && type !== 'reset') {
+            return res.json({ code: 400, message: '验证码类型必须是register或reset' });
+        }
+
+        // 注册时检查联系方式是否已被使用
+        if (type === 'register') {
+            const existingUser = await User.findOne({
+                $or: [
+                    { email: contact },
+                    { phone: contact }
+                ]
+            });
+
+            if (existingUser) {
+                return res.json({ code: 400, message: '该邮箱或手机号已被注册' });
+            }
+        }
+
+        // 发送验证码
+        const result = await verificationCodeService.sendCode(contact, type);
+
+        if (result.success) {
+            logUserAction(req, 'SEND_CODE_SUCCESS', { contact, type });
+            return res.json({ code: 200, message: result.message });
+        } else {
+            logUserAction(req, 'SEND_CODE_FAILED', { contact, type, reason: result.message });
+            return res.json({ code: 400, message: result.message });
+        }
+    } catch (error) {
+        logApiError(req, error, 500);
+        return res.json({ code: 500, message: '服务器内部错误' });
+    }
+});
+
+// 验证验证码
+router.post('/verify-code', async (req, res) => {
+    try {
+        const { contact, code } = req.body;
+
+        if (!contact || !code) {
+            return res.json({ code: 400, message: '联系方式和验证码不能为空' });
+        }
+
+        // 验证验证码
+        const result = await verificationCodeService.verifyCode(contact, code);
+
+        if (result.success) {
+            // 更新用户验证状态
+            const user = await User.findOne({
+                $or: [
+                    { email: contact },
+                    { phone: contact }
+                ]
+            });
+
+            if (user) {
+                user.isVerified = true;
+                await user.save();
+            }
+
+            // 生成一个简单的token（在实际项目中应该使用JWT等安全方式）
+            const token = Buffer.from(contact + ':' + Date.now()).toString('base64');
+
+            logUserAction(req, 'VERIFY_CODE_SUCCESS', { contact });
+            return res.json({ 
+                code: 200, 
+                message: result.message,
+                data: {
+                    resetUrl: `/api/auth/reset-password?token=${token}`,
+                    contact: contact
+                }
+            });
+        } else {
+            logUserAction(req, 'VERIFY_CODE_FAILED', { contact, reason: result.message });
+            return res.json({ code: 400, message: result.message });
+        }
+    } catch (error) {
+        logApiError(req, error, 500);
+        return res.json({ code: 500, message: '服务器内部错误' });
+    }
+});
+
 router.post('/register', async (req, res) => {
     try {
-        const { username, password } = req.body;
+        const { username, password, email, phone, verificationCode } = req.body;
 
         if (!username || !password) {
             return res.json({ code: 400, message: '用户名和密码不能为空' });
+        }
+
+        // 如果提供了邮箱或手机号，需要验证验证码
+        if (email || phone) {
+            if (!verificationCode) {
+                return res.json({ code: 400, message: '请提供验证码' });
+            }
+
+            const contact = email || phone;
+            const verifyResult = await verificationCodeService.verifyCode(contact, verificationCode);
+
+            if (!verifyResult.success) {
+                return res.json({ code: 400, message: verifyResult.message });
+            }
         }
 
         const user = await User.findOne({ username });
@@ -118,7 +473,13 @@ router.post('/register', async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
-        const newUser = new User({ username, password: hashedPassword });
+
+        // 创建用户对象，包含可选的邮箱和手机号
+        const userData = { username, password: hashedPassword };
+        if (email) userData.email = email;
+        if (phone) userData.phone = phone;
+
+        const newUser = new User(userData);
         await newUser.save();
 
         logUserAction(req, 'REGISTER_SUCCESS', { username, userId: newUser._id });

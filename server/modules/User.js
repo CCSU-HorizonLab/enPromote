@@ -9,6 +9,41 @@ let userSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
+    email: {
+        type: String,
+        unique: true,
+        sparse: true, // 允许为空，但如果有值必须唯一
+        validate: {
+            validator: function(v) {
+                return !v || /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/.test(v);
+            },
+            message: '请输入有效的邮箱地址'
+        }
+    },
+    phone: {
+        type: String,
+        unique: true,
+        sparse: true, // 允许为空，但如果有值必须唯一
+        validate: {
+            validator: function(v) {
+                return !v || /^1[3-9]\d{9}$/.test(v);
+            },
+            message: '请输入有效的手机号码'
+        }
+    },
+    // 验证码相关字段
+    verificationCode: {
+        type: String,
+        default: null
+    },
+    codeExpireTime: {
+        type: Date,
+        default: null
+    },
+    isVerified: {
+        type: Boolean,
+        default: false
+    },
     avatar: {
         type: String,
         default: 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'

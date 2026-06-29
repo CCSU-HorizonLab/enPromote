@@ -62,7 +62,10 @@
                     </button>
                 </div>
                 <div class="form-footer">
-                    <p>还没有账号？<router-link to="/register">立即注册</router-link></p>
+                    <p>
+                        还没有账号？<router-link to="/register">立即注册</router-link> | 
+                        <router-link to="/forgot-password">忘记密码？</router-link>
+                    </p>
                 </div>
             </form>
         </div>

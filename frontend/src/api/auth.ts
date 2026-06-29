@@ -159,5 +159,59 @@ function switchChapter(chapter: string): Promise<AxiosApiResponse> {
     return request.post('/auth/switch-chapter', { chapter });
 }
 
-export { login, register, logout, getUserInfo, changeInfo, uploadAvatar, switchChapter };
+// 忘记密码相关API
+interface ForgotPasswordData {
+    contact: string;
+    type: 'phone' | 'email';
+    code: string;
+}
+
+interface ForgotPasswordResetData {
+    contact: string;
+    type: 'phone' | 'email';
+    password: string;
+    confirmPassword: string;
+}
+
+function sendPhoneCode(phone: string): Promise<AxiosApiResponse> {
+    return request.post('/auth/send-phone-code', { phone });
+}
+
+function sendEmailCode(email: string): Promise<AxiosApiResponse> {
+    return request.post('/auth/send-email-code', { email });
+}
+
+function forgotPasswordVerify(data: ForgotPasswordData): Promise<AxiosApiResponse> {
+    return request.post('/auth/forgot-password-verify', data);
+}
+
+function forgotPasswordReset(data: ForgotPasswordResetData): Promise<AxiosApiResponse> {
+    return request.post('/auth/reset-password', data);
+}
+
+export { 
+    login, 
+    register, 
+    logout, 
+    getUserInfo, 
+    changeInfo, 
+    uploadAvatar, 
+    switchChapter,
+    sendPhoneCode,
+    sendEmailCode,
+    forgotPasswordVerify,
+    forgotPasswordReset
+};
+
+export type { 
+    LoginData, 
+    RegisterData, 
+    ChangeInfoData, 
+    ApiResponse, 
+    AxiosApiResponse, 
+    UserInfo, 
+    UserInfoApiResponse,
+    ForgotPasswordData,
+    ForgotPasswordResetData
+};
 export type { LoginData, RegisterData, ChangeInfoData, ApiResponse, AxiosApiResponse, UserInfo, UserInfoApiResponse };

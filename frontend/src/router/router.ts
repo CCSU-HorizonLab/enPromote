@@ -13,6 +13,16 @@ const router = createRouter({
             name: 'Register',
             component: () => import('../views/register.vue'),
         },
+        {
+            path: '/forgot-password',
+            name: 'ForgotPassword',
+            component: () => import('../views/forgot-password.vue'),
+        },
+        {
+            path: '/reset-password',
+            name: 'ResetPassword',
+            component: () => import('../views/reset-password.vue'),
+        },
 
         // 未登录品牌首页
         {
