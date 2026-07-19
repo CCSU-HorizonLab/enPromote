@@ -20,6 +20,15 @@ if (!aliyunApiKey && process.env.NODE_ENV === 'production') {
   console.warn('警告: 生产环境未配置 ALIYUN_API_KEY，阿里云百炼功能可能不可用');
 }
 
+// 邮件服务配置
+const email = {
+  host: process.env.EMAIL_HOST || 'smtp.qq.com',
+  port: parseInt(process.env.EMAIL_PORT, 10) || 465,
+  secure: process.env.EMAIL_SECURE === 'true',
+  user: process.env.EMAIL_USER || '',
+  pass: process.env.EMAIL_PASS || ''
+};
+
 module.exports = {
   port,
   host,
@@ -29,5 +38,6 @@ module.exports = {
   baseUrl,
   apiKey,
   aliyunBaseUrl,
-  aliyunApiKey
+  aliyunApiKey,
+  email
 };

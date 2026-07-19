@@ -444,6 +444,60 @@ router.post('/verify-code', async (req, res) => {
     }
 });
 
+// 发送手机验证码
+router.post('/send-phone-code', async (req, res) => {
+    try {
+        const { phone } = req.body;
+
+        if (!phone) {
+            return res.json({ code: 400, message: '手机号不能为空' });
+        }
+
+        if (!/^1[3-9]\d{9}$/.test(phone)) {
+            return res.json({ code: 400, message: '手机号格式不正确' });
+        }
+
+        const result = await verificationCodeService.sendCode(phone, 'register');
+
+        if (result.success) {
+            logger.info(`验证码已发送到手机: ${phone}, 验证码: ${result.code}`);
+            return res.json({ code: 200, message: '验证码已发送' });
+        } else {
+            return res.json({ code: 400, message: result.message });
+        }
+    } catch (error) {
+        logApiError(req, error, 500);
+        return res.json({ code: 500, message: '服务器内部错误' });
+    }
+});
+
+// 发送邮箱验证码
+router.post('/send-email-code', async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        if (!email) {
+            return res.json({ code: 400, message: '邮箱不能为空' });
+        }
+
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.json({ code: 400, message: '邮箱格式不正确' });
+        }
+
+        const result = await verificationCodeService.sendCode(email, 'register');
+
+        if (result.success) {
+            logger.info(`验证码已发送到邮箱: ${email}, 验证码: ${result.code}`);
+            return res.json({ code: 200, message: '验证码已发送' });
+        } else {
+            return res.json({ code: 400, message: result.message });
+        }
+    } catch (error) {
+        logApiError(req, error, 500);
+        return res.json({ code: 500, message: '服务器内部错误' });
+    }
+});
+
 router.post('/register', async (req, res) => {
     try {
         const { username, password, email, phone, verificationCode } = req.body;

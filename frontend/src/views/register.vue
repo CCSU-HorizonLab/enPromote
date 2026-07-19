@@ -6,11 +6,11 @@
                 <!-- 用户名 -->
                 <div class="form-group">
                     <label for="username">用户名</label>
-                    <input 
-                        type="text" 
-                        id="username" 
-                        name="username" 
-                        v-model="username" 
+                    <input
+                        type="text"
+                        id="username"
+                        name="username"
+                        v-model="username"
                         :class="{ 'is-invalid': usernameTouched && !usernameValid }"
                         @blur="usernameTouched = true"
                         required
@@ -24,22 +24,21 @@
                 <div class="form-group">
                     <label for="password">密码</label>
                     <div class="password-input-wrapper">
-                        <input 
-                            :type="showPassword ? 'text' : 'password'" 
-                            id="password" 
-                            name="password" 
-                            v-model="password" 
+                        <input
+                            :type="showPassword ? 'text' : 'password'"
+                            id="password"
+                            name="password"
+                            v-model="password"
                             :class="{ 'is-invalid': passwordTouched && !passwordValid }"
                             @blur="passwordTouched = true"
                             required
                         >
-                        <button 
-                            type="button" 
-                            class="password-toggle-btn" 
+                        <button
+                            type="button"
+                            class="password-toggle-btn"
                             @click="showPassword = !showPassword"
                             :title="showPassword ? '隐藏密码' : '显示密码'"
                         >
-                            <!-- 眼睛图标 -->
                             <svg v-if="showPassword" viewBox="0 0 24 24">
                                 <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
                             </svg>
@@ -66,74 +65,25 @@
                     </div>
                 </div>
 
-                <!-- 联系方式 -->
-                <div class="form-group">
-                    <label for="contact">联系方式</label>
-                    <div class="input-group">
-                        <input
-                            type="text"
-                            id="contact"
-                            name="contact"
-                            v-model="contact"
-                            placeholder="请输入手机号或邮箱"
-                            :class="{ 'is-invalid': contactTouched && !contactValid }"
-                            @blur="contactTouched = true"
-                        >
-                        <button
-                            type="button"
-                            class="btn-send-code"
-                            :disabled="contactLoading || !contactValid"
-                            @click="sendCode"
-                        >
-                            {{ contactCountdown > 0 ? `${contactCountdown}秒` : '发送验证码' }}
-                        </button>
-                    </div>
-                    <span v-if="contactTouched && !contactValid" class="error-feedback">
-                        请输入正确的手机号或邮箱格式
-                    </span>
-                    <span v-if="contactCodeError" class="error-feedback">
-                        {{ contactCodeError }}
-                    </span>
-                </div>
-
-                <!-- 验证码 -->
-                <div class="form-group" v-if="contact">
-                    <label for="code">验证码</label>
-                    <input
-                        type="text"
-                        id="code"
-                        name="code"
-                        v-model="code"
-                        placeholder="请输入验证码"
-                        :class="{ 'is-invalid': codeTouched && !codeValid }"
-                        @blur="codeTouched = true"
-                        maxlength="6"
-                    >
-                    <span v-if="codeTouched && !codeValid" class="error-feedback">
-                        请输入6位验证码
-                    </span>
-                </div>
-
                 <!-- 确认密码 -->
                 <div class="form-group">
                     <label for="confirm-password">确认密码</label>
                     <div class="password-input-wrapper">
-                        <input 
-                            :type="showConfirmPassword ? 'text' : 'password'" 
-                            id="confirm-password" 
-                            name="confirmPassword" 
+                        <input
+                            :type="showConfirmPassword ? 'text' : 'password'"
+                            id="confirm-password"
+                            name="confirmPassword"
                             v-model="confirmPassword"
                             :class="{ 'is-invalid': confirmPasswordTouched && !confirmPasswordValid }"
                             @blur="confirmPasswordTouched = true"
                             required
                         >
-                        <button 
-                            type="button" 
-                            class="password-toggle-btn" 
+                        <button
+                            type="button"
+                            class="password-toggle-btn"
                             @click="showConfirmPassword = !showConfirmPassword"
                             :title="showConfirmPassword ? '隐藏密码' : '显示密码'"
                         >
-                            <!-- 眼睛图标 -->
                             <svg v-if="showConfirmPassword" viewBox="0 0 24 24">
                                 <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
                             </svg>
@@ -144,6 +94,53 @@
                     </div>
                     <span v-if="confirmPasswordTouched && !confirmPasswordValid" class="error-feedback">
                         {{ confirmPasswordError }}
+                    </span>
+                </div>
+
+                <!-- 邮箱注册 -->
+                <div class="form-group">
+                    <label for="email">邮箱</label>
+                    <div class="input-group">
+                        <input
+                            type="email"
+                            id="email"
+                            name="email"
+                            v-model="email"
+                            placeholder="请输入邮箱地址"
+                            :class="{ 'is-invalid': emailTouched && !emailValid }"
+                            @blur="emailTouched = true"
+                        >
+                        <button
+                            type="button"
+                            class="btn-send-code"
+                            :disabled="contactLoading || !emailValid"
+                            @click="sendEmailCode"
+                        >
+                            {{ emailCountdown > 0 ? `${emailCountdown}秒` : '发送验证码' }}
+                        </button>
+                    </div>
+                    <span v-if="emailTouched && !emailValid" class="error-feedback">
+                        请输入正确的邮箱格式
+                    </span>
+                    <span v-if="emailCodeError" class="error-feedback">
+                        {{ emailCodeError }}
+                    </span>
+                </div>
+
+                <div class="form-group">
+                    <label for="email-code">验证码</label>
+                    <input
+                        type="text"
+                        id="email-code"
+                        name="emailCode"
+                        v-model="emailCode"
+                        placeholder="请输入6位验证码"
+                        :class="{ 'is-invalid': emailCodeTouched && !emailCodeValid }"
+                        @blur="emailCodeTouched = true"
+                        maxlength="6"
+                    >
+                    <span v-if="emailCodeTouched && !emailCodeValid" class="error-feedback">
+                        请输入6位验证码
                     </span>
                 </div>
 
@@ -164,7 +161,7 @@
 </template>
 <script setup>
 import { ref, computed } from 'vue';
-import { register } from '@/api/auth';
+import { register, sendEmailCode as apiSendEmailCode } from '@/api/auth';
 import { useRouter } from 'vue-router';
 import { toast } from '@/utils/toastService';
 
@@ -173,8 +170,9 @@ const router = useRouter();
 const username = ref('');
 const password = ref('');
 const confirmPassword = ref('');
-const contact = ref('');
-const code = ref('');
+
+const email = ref('');
+const emailCode = ref('');
 
 // 交互与状态控制
 const showPassword = ref(false);
@@ -184,10 +182,11 @@ const contactLoading = ref(false);
 const usernameTouched = ref(false);
 const passwordTouched = ref(false);
 const confirmPasswordTouched = ref(false);
-const contactTouched = ref(false);
-const codeTouched = ref(false);
-const contactCodeError = ref('');
-const contactCountdown = ref(0);
+
+const emailTouched = ref(false);
+const emailCodeTouched = ref(false);
+const emailCountdown = ref(0);
+const emailCodeError = ref('');
 
 // 校验规则
 const usernameValid = computed(() => username.value.trim().length > 0);
@@ -208,23 +207,21 @@ const confirmPasswordError = computed(() => {
 const strengthScore = computed(() => {
     const pwd = password.value;
     if (pwd.length < 6) return 0;
-    
-    let score = 1; // 长度大于等于 6 获得基础分 1
-    
+
+    let score = 1;
+
     const hasLetters = /[a-zA-Z]/.test(pwd);
     const hasNumbers = /[0-9]/.test(pwd);
     const hasSpecial = /[^a-zA-Z0-9]/.test(pwd);
-    
-    // 如果同时包含字母和数字，得 2 分
+
     if (hasLetters && hasNumbers) {
         score = 2;
     }
-    
-    // 包含字母、数字且长度 >= 8，或包含特殊字符，得 3 分
+
     if ((hasLetters && hasNumbers && hasSpecial) || (hasLetters && hasNumbers && pwd.length >= 8)) {
         score = 3;
     }
-    
+
     return score;
 });
 
@@ -244,70 +241,43 @@ const strengthClass = computed(() => {
     return '';
 });
 
-// 校验规则
-const contactValid = computed(() => {
-    if (!contact.value) return false;
-    const phoneRegex = /^1[3-9]\d{9}$/;
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return phoneRegex.test(contact.value) || emailRegex.test(contact.value);
+// 邮箱校验
+const emailValid = computed(() => {
+    if (!email.value) return false;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value);
 });
 
-const codeValid = computed(() => {
-    if (!code.value) return false;
-    return /^\d{6}$/.test(code.value);
+const emailCodeValid = computed(() => {
+    if (!emailCode.value) return false;
+    return /^\d{6}$/.test(emailCode.value);
 });
 
 const isFormValid = computed(() => {
-    // 至少需要手机号或邮箱
-    const hasContact = contactValid.value;
-    return usernameValid.value && passwordValid.value && confirmPasswordValid.value && hasContact;
+    return usernameValid.value && passwordValid.value && confirmPasswordValid.value
+        && emailValid.value && emailCodeValid.value;
 });
 
-// 发送验证码
-async function sendCode() {
-    if (!contactValid.value) {
-        contactTouched.value = true;
+// 发送邮箱验证码
+async function sendEmailCode() {
+    if (!emailValid.value) {
+        emailTouched.value = true;
         return;
     }
 
     contactLoading.value = true;
     try {
-        // 判断是手机号还是邮箱
-        const phoneRegex = /^1[3-9]\d{9}$/;
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-        if (phoneRegex.test(contact.value)) {
-            const { sendPhoneCode } = await import('@/api/auth');
-            const res = await sendPhoneCode(contact.value);
-            if (res.data.code === 200) {
-                toast.success('验证码已发送');
-                // 开始倒计时
-                contactCountdown.value = 60;
-                const timer = setInterval(() => {
-                    contactCountdown.value--;
-                    if (contactCountdown.value <= 0) {
-                        clearInterval(timer);
-                    }
-                }, 1000);
-            } else {
-                contactCodeError.value = res.data.message;
-            }
-        } else if (emailRegex.test(contact.value)) {
-            const { sendEmailCode } = await import('@/api/auth');
-            const res = await sendEmailCode(contact.value);
-            if (res.data.code === 200) {
-                toast.success('验证码已发送');
-                // 开始倒计时
-                contactCountdown.value = 60;
-                const timer = setInterval(() => {
-                    contactCountdown.value--;
-                    if (contactCountdown.value <= 0) {
-                        clearInterval(timer);
-                    }
-                }, 1000);
-            } else {
-                contactCodeError.value = res.data.message;
-            }
+        const res = await apiSendEmailCode(email.value);
+        if (res.data.code === 200) {
+            toast.success('验证码已发送');
+            emailCountdown.value = 60;
+            const timer = setInterval(() => {
+                emailCountdown.value--;
+                if (emailCountdown.value <= 0) {
+                    clearInterval(timer);
+                }
+            }, 1000);
+        } else {
+            emailCodeError.value = res.data.message;
         }
     } catch (error) {
         console.error('发送验证码失败:', error);
@@ -322,8 +292,8 @@ function clickRegister() {
         usernameTouched.value = true;
         passwordTouched.value = true;
         confirmPasswordTouched.value = true;
-        contactTouched.value = true;
-        codeTouched.value = true;
+        emailTouched.value = true;
+        emailCodeTouched.value = true;
         toast.error('请检查输入信息');
         return;
     }
@@ -333,8 +303,8 @@ function clickRegister() {
         username: username.value,
         password: password.value,
         confirmPassword: confirmPassword.value,
-        contact: contact.value,
-        code: code.value
+        email: email.value,
+        verificationCode: emailCode.value
     };
 
     register(data)
@@ -363,12 +333,40 @@ function clickRegister() {
 <style scoped>
 @import '../assets/css/auth.css';
 
-/* 表单提示样式 */
-.form-hint {
-    color: #69736f;
-    font-size: 14px;
-    margin-top: 8px;
-    margin-bottom: 20px;
-    text-align: center;
+/* 发送验证码按钮 */
+.btn-send-code {
+    padding: 12px 16px;
+    background: #1f8a70;
+    border: none;
+    border-radius: 12px;
+    color: #fff;
+    font-family: 'Outfit', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+}
+
+.btn-send-code:hover:not(:disabled) {
+    background: #11614f;
+}
+
+.btn-send-code:disabled {
+    background: #bdc3c7;
+    cursor: not-allowed;
+    opacity: 0.8;
+}
+
+/* 输入框 + 按钮组合 */
+.input-group {
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+}
+
+.input-group input {
+    flex: 1;
 }
 </style>

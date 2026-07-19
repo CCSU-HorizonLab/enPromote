@@ -1,10 +1,15 @@
 /**
  * 验证码服务
  * 用于生成、发送和验证验证码
+ *
+ * 邮箱验证码：通过 nodemailer 真正发送邮件
+ * 手机验证码：开发环境下模拟发送（日志打印），生产环境需接入短信服务商
  */
 
 const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 const { logger } = require('../utils/logger');
+const { email: emailConfig } = require('../config/serve');
 
 class VerificationCodeService {
   constructor() {
@@ -12,6 +17,33 @@ class VerificationCodeService {
     this.codeStorage = new Map();
     // 验证码有效期（5分钟）
     this.codeExpireTime = 5 * 60 * 1000;
+    // 邮件发送器（按需初始化）
+    this._mailTransporter = null;
+  }
+
+  /**
+   * 获取邮件发送器（懒加载）
+   */
+  _getMailTransporter() {
+    if (this._mailTransporter) return this._mailTransporter;
+
+    if (!emailConfig.user || !emailConfig.pass) {
+      logger.warn('邮件服务未配置（EMAIL_USER / EMAIL_PASS），将使用模拟发送');
+      return null;
+    }
+
+    this._mailTransporter = nodemailer.createTransport({
+      host: emailConfig.host,
+      port: emailConfig.port,
+      secure: emailConfig.secure,
+      auth: {
+        user: emailConfig.user,
+        pass: emailConfig.pass
+      }
+    });
+
+    logger.info(`邮件服务初始化完成: ${emailConfig.user} (${emailConfig.host}:${emailConfig.port})`);
+    return this._mailTransporter;
   }
 
   /**
@@ -48,22 +80,18 @@ class VerificationCodeService {
         sendTime: new Date()
       });
 
-      // 模拟发送验证码（实际项目中应调用邮件或短信服务）
-      let message = '';
-      if (contact.includes('@')) {
-        // 模拟发送邮件
-        message = `模拟邮件发送：验证码 ${code} 已发送到邮箱 ${contact}，有效期5分钟`;
-        logger.info(`模拟邮件发送: ${message}`);
+      const isEmail = contact.includes('@');
+
+      if (isEmail) {
+        await this._sendEmailCode(contact, code, type);
       } else {
-        // 模拟发送短信
-        message = `模拟短信发送：验证码 ${code} 已发送到手机号 ${contact}，有效期5分钟`;
-        logger.info(`模拟短信发送: ${message}`);
+        await this._sendPhoneCode(contact, code, type);
       }
 
       return {
         success: true,
         message: `验证码已发送到${contact}`,
-        code // 仅用于测试，实际项目中不应返回验证码
+        code // 开发环境返回验证码方便测试，生产环境不应返回
       };
     } catch (error) {
       logger.error('发送验证码失败:', error);
@@ -72,6 +100,71 @@ class VerificationCodeService {
         message: '发送验证码失败，请稍后重试'
       };
     }
+  }
+
+  /**
+   * 发送邮件验证码
+   */
+  async _sendEmailCode(email, code, type) {
+    const typeLabel = type === 'register' ? '注册' : '重置密码';
+    const subject = `【EnglishMastery】${typeLabel}验证码`;
+
+    const html = `
+      <div style="max-width:600px;margin:0 auto;padding:30px 20px;font-family:'Outfit','Segoe UI',sans-serif;background:#fffdf7;border-radius:16px;border:1px solid rgba(36,49,47,0.08);">
+        <div style="text-align:center;margin-bottom:24px;">
+          <h1 style="color:#1f8a70;font-size:24px;margin:0;">EnglishMastery</h1>
+          <p style="color:#69736f;font-size:14px;margin:8px 0 0;">英语学习平台</p>
+        </div>
+        <div style="background:#ffffff;border-radius:12px;padding:24px;">
+          <p style="color:#24312f;font-size:15px;line-height:1.6;margin:0 0 16px;">您好！</p>
+          <p style="color:#24312f;font-size:15px;line-height:1.6;margin:0 0 16px;">
+            您正在进行 <strong>${typeLabel}</strong> 操作，请使用以下验证码：
+          </p>
+          <div style="text-align:center;margin:24px 0;">
+            <span style="display:inline-block;font-size:36px;font-weight:700;letter-spacing:8px;color:#1f8a70;background:#f0f9f6;padding:16px 32px;border-radius:12px;font-family:monospace;">${code}</span>
+          </div>
+          <p style="color:#69736f;font-size:13px;line-height:1.6;margin:0;">
+            验证码有效期为 <strong>5分钟</strong>，请勿泄露给他人。<br>
+            如果您没有进行此操作，请忽略此邮件。
+          </p>
+        </div>
+        <div style="text-align:center;margin-top:20px;">
+          <p style="color:#bdc3c7;font-size:12px;margin:0;">此邮件由系统自动发送，请勿回复</p>
+        </div>
+      </div>
+    `;
+
+    const transporter = this._getMailTransporter();
+
+    if (!transporter) {
+      // 未配置邮件服务，模拟发送
+      logger.info(`[模拟邮件] 验证码 ${code} 已发送到邮箱 ${email}`);
+      logger.info(`[模拟邮件] 主题: ${subject}`);
+      return;
+    }
+
+    const mailOptions = {
+      from: `"EnglishMastery" <${emailConfig.user}>`,
+      to: email,
+      subject,
+      html
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    logger.info(`邮件发送成功: ${email}, messageId: ${info.messageId}`);
+  }
+
+  /**
+   * 发送手机验证码（模拟）
+   * 生产环境建议接入：阿里云短信、腾讯云短信、Twilio 等
+   */
+  async _sendPhoneCode(phone, code, type) {
+    const typeLabel = type === 'register' ? '注册' : '重置密码';
+    logger.info(`[模拟短信] 验证码 ${code} 已发送到手机号 ${phone}（${typeLabel}）`);
+    logger.info(`[模拟短信] 提示：生产环境请接入短信服务商`);
+    // 生产环境代码示例（以阿里云短信为例）：
+    // const { default: Dyvmsapi } = await import('@alicloud/dyvmsapi');
+    // await client.sendSms({ PhoneNumbers: phone, SignName: 'EnglishMastery', TemplateCode: 'SMS_XXXXX', TemplateParam: JSON.stringify({ code }) });
   }
 
   /**
