@@ -2,65 +2,36 @@
     <div class="container">
         <div class="form-container">
             <h1>忘记密码</h1>
-            <p class="form-description">请输入您注册时使用的手机号或邮箱，我们将向您发送验证码以重置密码</p>
+            <p class="form-description">请输入您注册时使用的邮箱，我们将向您发送验证码以重置密码</p>
 
             <form @submit.prevent="submitForm">
-                <!-- 联系方式类型 -->
+                <!-- 邮箱 -->
                 <div class="form-group">
-                    <label>验证方式</label>
-                    <div class="contact-type">
-                        <label class="radio-label">
-                            <input
-                                type="radio"
-                                name="contactType"
-                                value="phone"
-                                v-model="contactType"
-                                @change="resetContact"
-                            >
-                            <span class="radio-text">手机号</span>
-                        </label>
-                        <label class="radio-label">
-                            <input
-                                type="radio"
-                                name="contactType"
-                                value="email"
-                                v-model="contactType"
-                                @change="resetContact"
-                            >
-                            <span class="radio-text">邮箱</span>
-                        </label>
-                    </div>
-                </div>
-
-                <!-- 联系方式 -->
-                <div class="form-group">
-                    <label :for="contactType === 'phone' ? 'phone' : 'email'">
-                        {{ contactType === 'phone' ? '手机号' : '邮箱' }}
-                    </label>
+                    <label for="email">邮箱</label>
                     <div class="input-group">
                         <input
-                            :type="contactType === 'phone' ? 'tel' : 'email'"
-                            :id="contactType === 'phone' ? 'phone' : 'email'"
-                            :name="contactType === 'phone' ? 'phone' : 'email'"
-                            v-model="contact"
-                            :placeholder="contactType === 'phone' ? '请输入手机号' : '请输入邮箱'"
-                            :class="{ 'is-invalid': contactTouched && !contactValid }"
-                            @blur="contactTouched = true"
+                            type="email"
+                            id="email"
+                            name="email"
+                            v-model="email"
+                            placeholder="请输入邮箱"
+                            :class="{ 'is-invalid': emailTouched && !emailValid }"
+                            @blur="emailTouched = true"
                         >
                         <button
                             type="button"
                             class="btn-send-code"
-                            :disabled="contactLoading || !contactValid"
-                            @click="sendCode"
+                            :disabled="contactLoading || !emailValid"
+                            @click="sendEmailCode"
                         >
-                            {{ contactCountdown > 0 ? `${contactCountdown}秒` : '发送验证码' }}
+                            {{ emailCountdown > 0 ? `${emailCountdown}秒` : '发送验证码' }}
                         </button>
                     </div>
-                    <span v-if="contactTouched && !contactValid" class="error-feedback">
-                        {{ contactType === 'phone' ? '手机号格式不正确' : '邮箱格式不正确' }}
+                    <span v-if="emailTouched && !emailValid" class="error-feedback">
+                        邮箱格式不正确
                     </span>
-                    <span v-if="contactCodeError" class="error-feedback">
-                        {{ contactCodeError }}
+                    <span v-if="emailCodeError" class="error-feedback">
+                        {{ emailCodeError }}
                     </span>
                 </div>
 
@@ -102,32 +73,25 @@
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { toast } from '@/utils/toastService';
-import { forgotPasswordVerify } from '@/api/auth';
+import { forgotPasswordVerify, sendEmailCode as apiSendEmailCode } from '@/api/auth';
 
 const router = useRouter();
 
-const contactType = ref('phone');
-const contact = ref('');
+const email = ref('');
 const code = ref('');
 
 // 交互与状态控制
 const loading = ref(false);
 const contactLoading = ref(false);
-const contactTouched = ref(false);
+const emailTouched = ref(false);
 const codeTouched = ref(false);
-const contactCodeError = ref('');
-const contactCountdown = ref(0);
+const emailCodeError = ref('');
+const emailCountdown = ref(0);
 
 // 校验规则
-const contactValid = computed(() => {
-    if (!contact.value) return false;
-    if (contactType.value === 'phone') {
-        const phoneRegex = /^1[3-9]\d{9}$/;
-        return phoneRegex.test(contact.value);
-    } else {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        return emailRegex.test(contact.value);
-    }
+const emailValid = computed(() => {
+    if (!email.value) return false;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value);
 });
 const codeValid = computed(() => {
     if (!code.value) return false;
@@ -135,62 +99,31 @@ const codeValid = computed(() => {
 });
 
 const isFormValid = computed(() => {
-    return contactValid.value && codeValid.value;
+    return emailValid.value && codeValid.value;
 });
 
-// 重置联系方式
-function resetContact() {
-    contact.value = '';
-    code.value = '';
-    contactCodeError.value = '';
-    contactCountdown.value = 0;
-}
-
-// 发送验证码
-async function sendCode() {
-    if (!contactValid.value) {
-        contactTouched.value = true;
+// 发送邮箱验证码
+async function sendEmailCode() {
+    if (!emailValid.value) {
+        emailTouched.value = true;
         return;
     }
 
     contactLoading.value = true;
     try {
-        // 模拟验证码功能（开发环境）
-        if (process.env.NODE_ENV === 'development') {
-            console.log('开发环境：模拟验证码功能');
-            const mockCode = contactType.value === 'phone' ? '123456' : '654321';
-            console.log(`模拟验证码为: ${mockCode}`);
-            toast.success(`开发环境验证码: ${mockCode}`);
-            
-            // 开始倒计时
-            contactCountdown.value = 60;
-            const timer = setInterval(() => {
-                contactCountdown.value--;
-                if (contactCountdown.value <= 0) {
-                    clearInterval(timer);
-                }
-            }, 1000);
-            return;
-        }
-        
-        // 生产环境正常流程
-        const apiFunction = contactType.value === 'phone' 
-            ? (await import('@/api/auth')).sendPhoneCode 
-            : (await import('@/api/auth')).sendEmailCode;
-
-        const res = await apiFunction(contact.value);
+        const res = await apiSendEmailCode(email.value, 'reset');
         if (res.data.code === 200) {
             toast.success('验证码已发送');
             // 开始倒计时
-            contactCountdown.value = 60;
+            emailCountdown.value = 60;
             const timer = setInterval(() => {
-                contactCountdown.value--;
-                if (contactCountdown.value <= 0) {
+                emailCountdown.value--;
+                if (emailCountdown.value <= 0) {
                     clearInterval(timer);
                 }
             }, 1000);
         } else {
-            contactCodeError.value = res.data.message;
+            emailCodeError.value = res.data.message;
         }
     } catch (error) {
         console.error('发送验证码失败:', error);
@@ -203,7 +136,7 @@ async function sendCode() {
 // 提交表单
 async function submitForm() {
     if (!isFormValid.value) {
-        contactTouched.value = true;
+        emailTouched.value = true;
         codeTouched.value = true;
         toast.error('请检查输入信息');
         return;
@@ -212,8 +145,8 @@ async function submitForm() {
     loading.value = true;
     try {
         const data = {
-            contact: contact.value,
-            type: contactType.value,
+            contact: email.value,
+            type: 'email',
             code: code.value
         };
 
@@ -222,7 +155,7 @@ async function submitForm() {
             // 验证成功，跳转到重置密码页面
             router.push({
                 path: '/reset-password',
-                query: { contact: contact.value, type: contactType.value }
+                query: { contact: email.value, type: 'email' }
             });
         } else {
             toast.error(res.data.message);
@@ -247,27 +180,6 @@ async function submitForm() {
     text-align: center;
 }
 
-/* 联系方式类型样式 */
-.contact-type {
-    display: flex;
-    gap: 20px;
-    margin-bottom: 10px;
-}
-
-.radio-label {
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-}
-
-.radio-label input[type="radio"] {
-    margin-right: 8px;
-}
-
-.radio-text {
-    font-size: 16px;
-}
-
 /* 验证码按钮样式 */
 .btn-send-code {
     padding: 10px 15px;
@@ -289,15 +201,6 @@ async function submitForm() {
     cursor: not-allowed;
 }
 
-/* 表单提示样式 */
-.form-hint {
-    color: #69736f;
-    font-size: 14px;
-    margin-top: 8px;
-    margin-bottom: 20px;
-    text-align: center;
-}
-
 /* 确保页面容器样式正确 */
 .container {
     display: flex;
@@ -305,7 +208,7 @@ async function submitForm() {
     align-items: center;
     min-height: calc(100vh - 70px);
     padding: 40px 20px;
-    background: 
+    background:
         radial-gradient(circle at 10% 20%, rgba(240, 164, 58, 0.08) 0%, transparent 40%),
         radial-gradient(circle at 90% 80%, rgba(31, 138, 112, 0.08) 0%, transparent 40%),
         linear-gradient(135deg, #fbf8ef 0%, #f7f4ea 100%);
@@ -323,5 +226,16 @@ async function submitForm() {
     position: relative;
     overflow: hidden;
     transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* 输入框 + 按钮组合 */
+.input-group {
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+}
+
+.input-group input {
+    flex: 1;
 }
 </style>

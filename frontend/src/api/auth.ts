@@ -162,23 +162,19 @@ function switchChapter(chapter: string): Promise<AxiosApiResponse> {
 // 忘记密码相关API
 interface ForgotPasswordData {
     contact: string;
-    type: 'phone' | 'email';
+    type: 'email';
     code: string;
 }
 
 interface ForgotPasswordResetData {
     contact: string;
-    type: 'phone' | 'email';
+    type: 'email';
     password: string;
     confirmPassword: string;
 }
 
-function sendPhoneCode(phone: string): Promise<AxiosApiResponse> {
-    return request.post('/auth/send-phone-code', { phone });
-}
-
-function sendEmailCode(email: string): Promise<AxiosApiResponse> {
-    return request.post('/auth/send-email-code', { email });
+function sendEmailCode(email: string, type: 'register' | 'reset' = 'register'): Promise<AxiosApiResponse> {
+    return request.post('/auth/send-email-code', { email, type });
 }
 
 function forgotPasswordVerify(data: ForgotPasswordData): Promise<AxiosApiResponse> {
@@ -189,27 +185,26 @@ function forgotPasswordReset(data: ForgotPasswordResetData): Promise<AxiosApiRes
     return request.post('/auth/reset-password', data);
 }
 
-export { 
-    login, 
-    register, 
-    logout, 
-    getUserInfo, 
-    changeInfo, 
-    uploadAvatar, 
+export {
+    login,
+    register,
+    logout,
+    getUserInfo,
+    changeInfo,
+    uploadAvatar,
     switchChapter,
-    sendPhoneCode,
     sendEmailCode,
     forgotPasswordVerify,
     forgotPasswordReset
 };
 
-export type { 
-    LoginData, 
-    RegisterData, 
-    ChangeInfoData, 
-    ApiResponse, 
-    AxiosApiResponse, 
-    UserInfo, 
+export type {
+    LoginData,
+    RegisterData,
+    ChangeInfoData,
+    ApiResponse,
+    AxiosApiResponse,
+    UserInfo,
     UserInfoApiResponse,
     ForgotPasswordData,
     ForgotPasswordResetData

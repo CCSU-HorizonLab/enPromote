@@ -2,7 +2,7 @@
     <div class="container">
         <div class="form-container">
             <h1>重置密码</h1>
-            <p class="form-description">为 {{ contactType === 'phone' ? `手机号 ${contact}` : `邮箱 ${contact}` }} 设置新密码</p>
+            <p class="form-description">为邮箱 {{ contact }} 设置新密码</p>
 
             <form @submit.prevent="submitForm">
                 <!-- 密码 -->
@@ -117,7 +117,7 @@ const confirmPassword = ref('');
 // 从路由参数中获取联系方式和类型
 onMounted(() => {
     contact.value = route.query.contact || '';
-    contactType.value = route.query.type || 'phone';
+    contactType.value = route.query.type || 'email';
 });
 
 // 交互与状态控制
@@ -187,10 +187,27 @@ const isFormValid = computed(() => {
 
 // 提交表单
 async function submitForm() {
-    if (!isFormValid.value) {
+    if (!password.value.trim()) {
         passwordTouched.value = true;
+        toast.error('请先输入新密码');
+        return;
+    }
+
+    if (!confirmPassword.value.trim()) {
         confirmPasswordTouched.value = true;
-        toast.error('请检查输入信息');
+        toast.error('请先输入确认密码');
+        return;
+    }
+
+    if (!passwordValid.value) {
+        passwordTouched.value = true;
+        toast.error('密码长度不能少于6位');
+        return;
+    }
+
+    if (!confirmPasswordValid.value) {
+        confirmPasswordTouched.value = true;
+        toast.error('两次密码输入不一致');
         return;
     }
 
@@ -198,7 +215,6 @@ async function submitForm() {
     try {
         const data = {
             contact: contact.value,
-            type: contactType.value,
             password: password.value,
             confirmPassword: confirmPassword.value
         };

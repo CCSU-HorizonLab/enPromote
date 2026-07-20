@@ -48,39 +48,31 @@ const SALT_ROUNDS = 10;
 function isBcryptHash(str) {
   return typeof str === 'string' && /^\$2[aby]\$\d{2}\$/.test(str);
 }
-// 忘记密码 - 验证验证码并返回重置页面
+// 忘记密码 - 验证邮箱验证码并返回重置页面
 router.post('/forgot-password', async (req, res) => {
     try {
-        const { contact, verificationCode } = req.body;
+        const { contact, code } = req.body;
 
-        if (!contact || !verificationCode) {
-            return res.json({ code: 400, message: '联系方式和验证码不能为空' });
+        if (!contact || !code) {
+            return res.json({ code: 400, message: '邮箱和验证码不能为空' });
         }
 
-        // 验证联系方式格式
-        const isEmail = contact.includes('@');
-        const isPhone = /^1[3-9]\d{9}$/.test(contact);
+        // 验证邮箱格式
+        if (!contact.includes('@')) {
+            return res.json({ code: 400, message: '请输入有效的邮箱地址' });
+        }
 
-        if (!isEmail && !isPhone) {
-            return res.json({ code: 400, message: '请输入有效的邮箱或手机号' });
+        // 先查找用户（避免验证码被消费后才发现邮箱未注册）
+        const user = await User.findOne({ email: contact });
+
+        if (!user) {
+            return res.json({ code: 400, message: '该邮箱未注册' });
         }
 
         // 验证验证码
-        const verifyResult = await verificationCodeService.verifyCode(contact, verificationCode);
+        const verifyResult = await verificationCodeService.verifyCode(contact, code);
         if (!verifyResult.success) {
             return res.json({ code: 400, message: verifyResult.message });
-        }
-
-        // 查找用户
-        const user = await User.findOne({
-            $or: [
-                { email: contact },
-                { phone: contact }
-            ]
-        });
-
-        if (!user) {
-            return res.json({ code: 400, message: '该联系方式未注册' });
         }
 
         // 生成一个简单的token（在实际项目中应该使用JWT等安全方式）
@@ -90,8 +82,8 @@ router.post('/forgot-password', async (req, res) => {
         logger.info(`用户 ${contact} 验证验证码成功，准备重置密码`);
 
         // 返回重置密码页面链接
-        return res.json({ 
-            code: 200, 
+        return res.json({
+            code: 200,
             message: '验证成功，请设置新密码',
             data: {
                 resetUrl: `/auth/reset-password?token=${token}`,
@@ -104,52 +96,90 @@ router.post('/forgot-password', async (req, res) => {
     }
 });
 
+// 忘记密码 - 验证验证码（兼容前端调用 /forgot-password-verify）
+router.post('/forgot-password-verify', async (req, res) => {
+    try {
+        const { contact, code } = req.body;
+
+        if (!contact || !code) {
+            return res.json({ code: 400, message: '邮箱和验证码不能为空' });
+        }
+
+        // 验证邮箱格式
+        if (!contact.includes('@')) {
+            return res.json({ code: 400, message: '请输入有效的邮箱地址' });
+        }
+
+        // 先查找用户（避免验证码被消费后才发现邮箱未注册）
+        const user = await User.findOne({ email: contact });
+
+        if (!user) {
+            return res.json({ code: 400, message: '该邮箱未注册' });
+        }
+
+        // 验证验证码
+        const verifyResult = await verificationCodeService.verifyCode(contact, code);
+        if (!verifyResult.success) {
+            return res.json({ code: 400, message: verifyResult.message });
+        }
+
+        logUserAction(req, 'VERIFY_CODE_FORGOT_PASSWORD', { contact });
+        logger.info(`用户 ${contact} 验证验证码成功，准备重置密码`);
+
+        return res.json({
+            code: 200,
+            message: '验证成功，请设置新密码'
+        });
+    } catch (error) {
+        logApiError(req, error, 500);
+        return res.json({ code: 500, message: '服务器内部错误' });
+    }
+});
+
 // 重置密码 - 实际更新密码
 router.post('/reset-password', async (req, res) => {
     try {
-        const { token, newPassword } = req.body;
+        const { contact, password, confirmPassword } = req.body;
 
-        if (!token || !newPassword) {
-            return res.json({ code: 400, message: '令牌和新密码不能为空' });
+        if (!contact || !password || !confirmPassword) {
+            return res.json({ code: 400, message: '邮箱、密码和确认密码不能为空' });
         }
 
-        // 解析token获取联系方式（简化版，实际项目中应该使用JWT等安全方式）
-        try {
-            const decoded = Buffer.from(token, 'base64').toString('utf-8');
-            const [contact] = decoded.split(':');
-
-            // 验证联系方式格式
-            const isEmail = contact.includes('@');
-            const isPhone = /^1[3-9]\d{9}$/.test(contact);
-
-            if (!isEmail && !isPhone) {
-                return res.json({ code: 400, message: '无效的令牌' });
-            }
-
-            // 查找用户
-            const user = await User.findOne({
-                $or: [
-                    { email: contact },
-                    { phone: contact }
-                ]
-            });
-
-            if (!user) {
-                return res.json({ code: 400, message: '该联系方式未注册' });
-            }
-
-            // 更新密码
-            const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
-            user.password = hashedPassword;
-            await user.save();
-
-            logUserAction(req, 'RESET_PASSWORD_SUCCESS', { contact });
-            logger.info(`用户 ${contact} 重置密码成功`);
-
-            return res.json({ code: 200, message: '密码重置成功' });
-        } catch (error) {
-            return res.json({ code: 400, message: '无效的令牌' });
+        if (password.length < 6) {
+            return res.json({ code: 400, message: '密码长度不能少于6位' });
         }
+
+        if (password !== confirmPassword) {
+            return res.json({ code: 400, message: '两次密码输入不一致' });
+        }
+
+        // 验证邮箱格式
+        if (!contact.includes('@')) {
+            return res.json({ code: 400, message: '邮箱格式不正确' });
+        }
+
+        // 查找用户
+        const user = await User.findOne({ email: contact });
+
+        if (!user) {
+            return res.json({ code: 400, message: '该邮箱未注册' });
+        }
+
+        // 检查新密码是否和旧密码相同
+        const isSamePassword = await bcrypt.compare(password, user.password);
+        if (isSamePassword) {
+            return res.json({ code: 400, message: '新密码不能与旧密码相同' });
+        }
+
+        // 更新密码
+        const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+        user.password = hashedPassword;
+        await user.save();
+
+        logUserAction(req, 'RESET_PASSWORD_SUCCESS', { contact });
+        logger.info(`用户 ${contact} 重置密码成功`);
+
+        return res.json({ code: 200, message: '密码重置成功' });
     } catch (error) {
         logApiError(req, error, 500);
         return res.json({ code: 500, message: '服务器内部错误' });
@@ -350,15 +380,12 @@ router.post('/send-code', async (req, res) => {
         const { contact, type } = req.body;
 
         if (!contact || !type) {
-            return res.json({ code: 400, message: '联系方式和验证码类型不能为空' });
+            return res.json({ code: 400, message: '邮箱和验证码类型不能为空' });
         }
 
-        // 验证联系方式格式
-        const isEmail = contact.includes('@');
-        const isPhone = /^1[3-9]\d{9}$/.test(contact);
-
-        if (!isEmail && !isPhone) {
-            return res.json({ code: 400, message: '请输入有效的邮箱或手机号' });
+        // 验证邮箱格式
+        if (!contact.includes('@')) {
+            return res.json({ code: 400, message: '请输入有效的邮箱地址' });
         }
 
         // 检查验证码类型
@@ -366,17 +393,12 @@ router.post('/send-code', async (req, res) => {
             return res.json({ code: 400, message: '验证码类型必须是register或reset' });
         }
 
-        // 注册时检查联系方式是否已被使用
+        // 注册时检查邮箱是否已被使用
         if (type === 'register') {
-            const existingUser = await User.findOne({
-                $or: [
-                    { email: contact },
-                    { phone: contact }
-                ]
-            });
+            const existingUser = await User.findOne({ email: contact });
 
             if (existingUser) {
-                return res.json({ code: 400, message: '该邮箱或手机号已被注册' });
+                return res.json({ code: 400, message: '该邮箱已被注册' });
             }
         }
 
@@ -402,7 +424,7 @@ router.post('/verify-code', async (req, res) => {
         const { contact, code } = req.body;
 
         if (!contact || !code) {
-            return res.json({ code: 400, message: '联系方式和验证码不能为空' });
+            return res.json({ code: 400, message: '邮箱和验证码不能为空' });
         }
 
         // 验证验证码
@@ -410,12 +432,7 @@ router.post('/verify-code', async (req, res) => {
 
         if (result.success) {
             // 更新用户验证状态
-            const user = await User.findOne({
-                $or: [
-                    { email: contact },
-                    { phone: contact }
-                ]
-            });
+            const user = await User.findOne({ email: contact });
 
             if (user) {
                 user.isVerified = true;
@@ -444,37 +461,10 @@ router.post('/verify-code', async (req, res) => {
     }
 });
 
-// 发送手机验证码
-router.post('/send-phone-code', async (req, res) => {
-    try {
-        const { phone } = req.body;
-
-        if (!phone) {
-            return res.json({ code: 400, message: '手机号不能为空' });
-        }
-
-        if (!/^1[3-9]\d{9}$/.test(phone)) {
-            return res.json({ code: 400, message: '手机号格式不正确' });
-        }
-
-        const result = await verificationCodeService.sendCode(phone, 'register');
-
-        if (result.success) {
-            logger.info(`验证码已发送到手机: ${phone}, 验证码: ${result.code}`);
-            return res.json({ code: 200, message: '验证码已发送' });
-        } else {
-            return res.json({ code: 400, message: result.message });
-        }
-    } catch (error) {
-        logApiError(req, error, 500);
-        return res.json({ code: 500, message: '服务器内部错误' });
-    }
-});
-
 // 发送邮箱验证码
 router.post('/send-email-code', async (req, res) => {
     try {
-        const { email } = req.body;
+        const { email, type = 'register' } = req.body;
 
         if (!email) {
             return res.json({ code: 400, message: '邮箱不能为空' });
@@ -484,10 +474,30 @@ router.post('/send-email-code', async (req, res) => {
             return res.json({ code: 400, message: '邮箱格式不正确' });
         }
 
-        const result = await verificationCodeService.sendCode(email, 'register');
+        if (type !== 'register' && type !== 'reset') {
+            return res.json({ code: 400, message: '验证码类型必须是register或reset' });
+        }
+
+        // 注册时：邮箱不能已被注册
+        if (type === 'register') {
+            const existingUser = await User.findOne({ email });
+            if (existingUser) {
+                return res.json({ code: 400, message: '该邮箱已被注册' });
+            }
+        }
+
+        // 重置密码时：邮箱必须已注册
+        if (type === 'reset') {
+            const user = await User.findOne({ email });
+            if (!user) {
+                return res.json({ code: 400, message: '该邮箱未注册' });
+            }
+        }
+
+        const result = await verificationCodeService.sendCode(email, type);
 
         if (result.success) {
-            logger.info(`验证码已发送到邮箱: ${email}, 验证码: ${result.code}`);
+            logger.info(`验证码已发送到邮箱: ${email}, 类型: ${type}, 验证码: ${result.code}`);
             return res.json({ code: 200, message: '验证码已发送' });
         } else {
             return res.json({ code: 400, message: result.message });
@@ -500,38 +510,37 @@ router.post('/send-email-code', async (req, res) => {
 
 router.post('/register', async (req, res) => {
     try {
-        const { username, password, email, phone, verificationCode } = req.body;
+        const { username, password, email, verificationCode } = req.body;
 
         if (!username || !password) {
             return res.json({ code: 400, message: '用户名和密码不能为空' });
         }
 
-        // 如果提供了邮箱或手机号，需要验证验证码
-        if (email || phone) {
-            if (!verificationCode) {
-                return res.json({ code: 400, message: '请提供验证码' });
-            }
-
-            const contact = email || phone;
-            const verifyResult = await verificationCodeService.verifyCode(contact, verificationCode);
-
-            if (!verifyResult.success) {
-                return res.json({ code: 400, message: verifyResult.message });
-            }
+        if (!email) {
+            return res.json({ code: 400, message: '请提供邮箱' });
         }
 
-        const user = await User.findOne({ username });
-        if (user) {
+        // 先检查用户名是否已存在（避免验证码被消费后才发现用户名重复）
+        const existingUser = await User.findOne({ username });
+        if (existingUser) {
             logUserAction(req, 'REGISTER_FAILED', { username, reason: '用户已存在' });
             return res.json({ code: 400, message: '用户已存在' });
         }
 
+        // 验证邮箱验证码
+        if (!verificationCode) {
+            return res.json({ code: 400, message: '请提供验证码' });
+        }
+
+        const verifyResult = await verificationCodeService.verifyCode(email, verificationCode);
+        if (!verifyResult.success) {
+            return res.json({ code: 400, message: verifyResult.message });
+        }
+
         const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
-        // 创建用户对象，包含可选的邮箱和手机号
-        const userData = { username, password: hashedPassword };
-        if (email) userData.email = email;
-        if (phone) userData.phone = phone;
+        // 创建用户对象
+        const userData = { username, password: hashedPassword, email };
 
         const newUser = new User(userData);
         await newUser.save();

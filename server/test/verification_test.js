@@ -116,8 +116,8 @@ describe('验证码功能测试', () => {
     }
   });
 
-  // 测试忘记密码
-  test('忘记密码', async () => {
+  // 测试忘记密码 - 验证验证码
+  test('忘记密码验证', async () => {
     // 先创建一个测试用户
     const hashedPassword = await require('bcrypt').hash('password123', 10);
     const testUser = new User({
@@ -145,23 +145,20 @@ describe('验证码功能测试', () => {
       const code = storedCode[1].code;
       console.log('重置密码验证码:', code);
 
-      // 使用正确的验证码重置密码
+      // 验证验证码
       const response = await request(app)
         .post('/auth/forgot-password')
         .send({
           contact: 'testuser@example.com',
-          newPassword: 'newpassword123',
-          verificationCode: code
+          code: code
         });
 
       expect(response.statusCode).toBe(200);
       expect(response.body.code).toBe(200);
-      expect(response.body.message).toBe('密码重置成功');
-
-      // 验证密码是否已更改
-      const user = await User.findOne({ username: 'testuser' });
-      const passwordMatch = await require('bcrypt').compare('newpassword123', user.password);
-      expect(passwordMatch).toBe(true);
+      expect(response.body.message).toBe('验证成功，请设置新密码');
+      expect(response.body.data).toBeTruthy();
+      expect(response.body.data.contact).toBe('testuser@example.com');
+      expect(response.body.data.resetUrl).toBeTruthy();
     } else {
       // 如果没有找到验证码，测试应该失败
       expect(true).toBe(false); // 强制使测试失败

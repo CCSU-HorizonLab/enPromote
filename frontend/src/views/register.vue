@@ -113,7 +113,7 @@
                         <button
                             type="button"
                             class="btn-send-code"
-                            :disabled="contactLoading || !emailValid"
+                            :disabled="contactLoading"
                             @click="sendEmailCode"
                         >
                             {{ emailCountdown > 0 ? `${emailCountdown}秒` : '发送验证码' }}
@@ -261,6 +261,24 @@ const isFormValid = computed(() => {
 async function sendEmailCode() {
     if (!emailValid.value) {
         emailTouched.value = true;
+        return;
+    }
+
+    if (!password.value.trim()) {
+        passwordTouched.value = true;
+        toast.error('请先输入密码');
+        return;
+    }
+
+    if (!confirmPassword.value.trim()) {
+        confirmPasswordTouched.value = true;
+        toast.error('请先输入确认密码');
+        return;
+    }
+
+    if (!confirmPasswordValid.value) {
+        confirmPasswordTouched.value = true;
+        toast.error('两次密码输入不一致');
         return;
     }
 
