@@ -4,19 +4,20 @@
  *
  * 邮箱验证码：通过 nodemailer 真正发送邮件
  * 手机验证码：开发环境下模拟发送（日志打印），生产环境需接入短信服务商
+ *
+ * 验证码存储在 MongoDB VerificationCode 集合中，支持 TTL 自动过期
  */
 
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const { logger } = require('../utils/logger');
 const { email: emailConfig } = require('../config/serve');
+const VerificationCode = require('../modules/VerificationCode');
 
 class VerificationCodeService {
   constructor() {
-    // 模拟存储验证码，实际项目中应使用Redis等缓存服务
-    this.codeStorage = new Map();
     // 验证码有效期（5分钟）
-    this.codeExpireTime = 5 * 60 * 1000;
+    this.codeExpireMs = 5 * 60 * 1000;
     // 邮件发送器（按需初始化）
     this._mailTransporter = null;
   }
@@ -61,6 +62,18 @@ class VerificationCodeService {
   }
 
   /**
+   * 将之前的验证码标记为已使用（软失效，等待 TTL 清理）
+   * @param {string} email
+   * @param {string} type
+   */
+  async _invalidatePreviousCodes(email, type) {
+    await VerificationCode.updateMany(
+      { email, type, isUsed: false },
+      { $set: { isUsed: true } }
+    );
+  }
+
+  /**
    * 发送验证码
    * @param {string} contact - 联系方式（邮箱或手机号）
    * @param {string} type - 验证码类型（register/reset）
@@ -70,14 +83,17 @@ class VerificationCodeService {
     try {
       // 生成验证码
       const code = this.generateCode(6);
-      const expireTime = new Date(Date.now() + this.codeExpireTime);
+      const expireTime = new Date(Date.now() + this.codeExpireMs);
 
-      // 存储验证码
-      this.codeStorage.set(contact, {
+      // 将同一邮箱同类型的旧验证码标记为已使用
+      await this._invalidatePreviousCodes(contact, type);
+
+      // 存储验证码到 MongoDB
+      await VerificationCode.create({
+        email: contact,
         code,
-        expireTime,
         type,
-        sendTime: new Date()
+        expireTime
       });
 
       const isEmail = contact.includes('@');
@@ -175,34 +191,38 @@ class VerificationCodeService {
    */
   async verifyCode(contact, code) {
     try {
-      const storedCode = this.codeStorage.get(contact);
+      // 从数据库查找未使用且未过期的验证码
+      const record = await VerificationCode.findOne({
+        email: contact,
+        code,
+        isUsed: false,
+        expireTime: { $gt: new Date() }
+      });
 
-      if (!storedCode) {
+      if (!record) {
+        // 区分不存在和已过期两种情况
+        const expiredRecord = await VerificationCode.findOne({
+          email: contact,
+          code,
+          isUsed: false
+        });
+
+        if (expiredRecord) {
+          return {
+            success: false,
+            message: '验证码已过期，请重新获取'
+          };
+        }
+
         return {
           success: false,
           message: '验证码不存在或已过期'
         };
       }
 
-      // 检查验证码是否过期
-      if (new Date() > storedCode.expireTime) {
-        this.codeStorage.delete(contact);
-        return {
-          success: false,
-          message: '验证码已过期，请重新获取'
-        };
-      }
-
-      // 验证码匹配检查
-      if (storedCode.code !== code) {
-        return {
-          success: false,
-          message: '验证码错误'
-        };
-      }
-
-      // 验证成功，删除已使用的验证码
-      this.codeStorage.delete(contact);
+      // 验证成功，标记为已使用
+      record.isUsed = true;
+      await record.save();
 
       return {
         success: true,

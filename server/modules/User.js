@@ -31,15 +31,6 @@ let userSchema = new mongoose.Schema({
             message: '请输入有效的手机号码'
         }
     },
-    // 验证码相关字段
-    verificationCode: {
-        type: String,
-        default: null
-    },
-    codeExpireTime: {
-        type: Date,
-        default: null
-    },
     isVerified: {
         type: Boolean,
         default: false
