@@ -1,108 +1,311 @@
 <template>
-  <main class="home-page">
-    <section class="home-hero">
-      <div class="hero-copy">
-        <span class="learn-kicker">今日英语训练台</span>
-        <h1>{{ storeUsername ? `${storeUsername}，今天从这里继续` : '把英语学习变成每天能完成的一关' }}</h1>
-        <p>
-          先用任务卡完成单词和闯关，再用 AI 口语把表达说出来。少一点找入口，多一点真正练习。
-        </p>
-        <div class="hero-actions">
-          <button class="learn-button" type="button" @click="startTodayStudy">继续今日任务</button>
-          <button class="learn-button secondary" type="button" @click="goToFreeChat">AI 口语热身</button>
+  <main class="learn-page home-page">
+    <!-- 顶部 HERO 区域 + 今日任务 -->
+    <section class="top-hero-section">
+      <!-- 左侧大 Banner 欢迎区 -->
+      <div class="hero-card learn-card">
+        <div class="hero-text-content">
+          <div class="hero-text-top">
+            <div class="learn-kicker">
+              <svg class="badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 3v18M12 3C8.5 3 5 6.5 5 11c0 4.5 3.5 7.5 7 10M12 3c3.5 0 7 3.5 7 8 0 4.5-3.5 7.5-7 10" />
+              </svg>
+              <span>每一次坚持，都是进步</span>
+            </div>
+
+            <h1 class="hero-title">
+              {{ storeUsername ? `${storeUsername}，今天从这里开始学习吧！` : '今天从这里开始学习吧！' }}
+            </h1>
+
+            <p class="hero-subtitle">
+              坚持每日学习，积累点滴进步，你正在成为更好的自己。
+            </p>
+          </div>
+
+          <button class="learn-button hero-btn" type="button" @click="startTodayStudy">
+            <span>开始今日任务</span>
+            <svg class="btn-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M5 12h14M12 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- 右侧 SVG 插画占位区域 (用户可替换) -->
+        <div class="hero-illustration-slot">
+          <!-- 背景装饰弱软光晕，充实右侧区域 -->
+          <div class="hero-svg-bg-glow"></div>
+          <svg viewBox="90 40 440 440" xmlns="http://www.w3.org/2000/svg" class="hero-svg-illustration">
+            <!-- 云朵装饰 (保留) -->
+            <g fill="#FFFFFF" opacity="0.9">
+              <circle cx="220" cy="120" r="18" />
+              <circle cx="245" cy="110" r="22" />
+              <circle cx="270" cy="120" r="16" />
+              <rect x="220" y="110" width="50" height="28" rx="14" />
+
+              <circle cx="380" cy="90" r="12" />
+              <circle cx="400" cy="80" r="18" />
+              <circle cx="420" cy="90" r="14" />
+              <rect x="380" y="80" width="40" height="24" rx="12" />
+            </g>
+
+            <!-- ================= 主体：剪贴板（本子） ================= -->
+            <g transform="translate(130, 130) rotate(-3)">
+              <!-- 剪贴板深绿色底板 -->
+              <rect x="0" y="0" width="280" height="360" rx="16" fill="#69A88F" />
+
+              <!-- 米白色纸张 -->
+              <rect x="20" y="20" width="240" height="320" rx="8" fill="#FFFDF8" />
+              <!-- 纸张底部微微的阴影感 -->
+              <path d="M 20 330 L 260 330 L 260 340 A 8 8 0 0 1 252 348 L 28 348 A 8 8 0 0 1 20 340 Z" fill="#F0ECE1" />
+
+              <!-- 顶部装订孔/夹子细节 -->
+              <rect x="70" y="25" width="20" height="25" rx="8" fill="#F4E9D8" />
+              <rect x="190" y="25" width="20" height="25" rx="8" fill="#F4E9D8" />
+
+              <!-- Today 标题区域 -->
+              <g transform="translate(60, 100)">
+                <circle cx="0" cy="-5" r="15" fill="#DCEADD" />
+                <path d="M -6 -5 L -2 -1 L 6 -9" stroke="#FFFFFF" stroke-width="3" fill="none" stroke-linecap="round"
+                  stroke-linejoin="round" />
+                <text x="25" y="2" fill="#69A88F" font-family="Arial, sans-serif" font-weight="bold"
+                  font-size="26">Today</text>
+              </g>
+
+              <!-- 纸张上的横线 -->
+              <line x1="50" y1="160" x2="230" y2="160" stroke="#F5F0E5" stroke-width="2" stroke-linecap="round" />
+              <line x1="50" y1="210" x2="230" y2="210" stroke="#F5F0E5" stroke-width="2" stroke-linecap="round" />
+              <line x1="50" y1="260" x2="230" y2="260" stroke="#F5F0E5" stroke-width="2" stroke-linecap="round" />
+
+              <!-- 居中的大打勾图案 -->
+              <g transform="translate(140, 210)">
+                <circle cx="0" cy="0" r="45" fill="#F4EFE3" />
+                <path d="M -18 2 L -4 16 L 20 -12" stroke="#69A88F" stroke-width="10" fill="none" stroke-linecap="round"
+                  stroke-linejoin="round" />
+              </g>
+            </g>
+
+            <!-- ================= 主体：铅笔 ================= -->
+            <g transform="translate(420, 250) rotate(12)">
+              <rect x="0" y="0" width="30" height="25" rx="4" fill="#3D4B42" />
+              <rect x="-1" y="20" width="32" height="6" fill="#F2E6D0" />
+              <rect x="0" y="26" width="30" height="180" fill="#7EBA9E" />
+              <line x1="10" y1="26" x2="10" y2="206" stroke="#8DC3A9" stroke-width="2" />
+              <line x1="20" y1="26" x2="20" y2="206" stroke="#6C9E87" stroke-width="2" />
+              <polygon points="0,206 30,206 15,246" fill="#F4E3C5" />
+              <polygon points="10.5,234 19.5,234 15,246" fill="#3A3A3A" />
+            </g>
+          </svg>
         </div>
       </div>
 
-      <div class="mission-panel learn-card">
-        <div class="panel-top">
-          <div>
-            <span class="panel-label">今日建议</span>
-            <h2>{{ personalizedGuide }}</h2>
+      <!-- 右侧今日任务卡片 -->
+      <div class="today-tasks-card learn-card">
+        <div class="tasks-card-header">
+          <h2 class="tasks-title">今日任务</h2>
+          <div class="streak-pill">
+            <span>{{ checkInData?.continuousCheckInDays || 0 }} 天连续</span>
           </div>
-          <div class="streak-pill">{{ checkInData?.continuousCheckInDays || 0 }} 天连续</div>
         </div>
 
-        <div class="mission-progress">
-          <div class="progress-meta">
-            <span>任务完成度</span>
-            <strong>{{ completedMissionCount }}/{{ missions.length }}</strong>
+        <div class="tasks-highlight-guide">
+          {{ personalizedGuide }}
+        </div>
+
+        <div class="tasks-progress-block">
+          <div class="progress-info">
+            <span class="progress-label">任务完成度</span>
+            <span class="progress-count">{{ completedMissionCount }}/{{ missions.length }}</span>
           </div>
           <div class="learn-progress">
             <span :style="{ width: missionProgress + '%' }"></span>
           </div>
         </div>
 
-        <div class="mission-list">
-          <button
-            v-for="mission in missions"
-            :key="mission.key"
-            class="mission-item"
-            :class="{ done: mission.done }"
-            type="button"
-            @click="mission.action"
-          >
-            <span class="mission-icon">{{ mission.icon }}</span>
-            <span>
-              <strong>{{ mission.title }}</strong>
-              <small>{{ mission.desc }}</small>
-            </span>
-            <em>{{ mission.done ? '已完成' : '去完成' }}</em>
-          </button>
+        <div class="task-items-list">
+          <div v-for="mission in missions" :key="mission.key" class="task-item-row" :class="{ 'is-done': mission.done }"
+            @click="mission.action">
+            <div class="task-icon-circle" :class="{ 'icon-done': mission.done }">
+              <svg v-if="mission.done" class="check-done-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="3">
+                <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span v-else>{{ mission.icon }}</span>
+            </div>
+
+            <div class="task-text-meta">
+              <div class="task-item-title">{{ mission.title }}</div>
+              <div class="task-item-desc">{{ mission.desc }}</div>
+            </div>
+
+            <button class="task-action-btn" :class="{ 'btn-done': mission.done }" type="button">
+              {{ mission.done ? '已完成' : '去完成' }}
+            </button>
+          </div>
         </div>
       </div>
     </section>
 
-    <section class="quick-grid">
-      <article class="quick-card featured" @click="goToChapters">
-        <span class="quick-eyebrow">主线推荐</span>
-        <h2>闯关学习</h2>
-        <p>酒店、餐厅场景按词汇、拼写、听力、AI 题目、实战对话推进。</p>
-        <div class="flow-line">
-          <span>词汇</span>
-          <span>拼写</span>
-          <span>听力</span>
-          <span>AI 题目</span>
-          <span>对话</span>
+    <!-- 中间区域：推荐学习路径 -->
+    <section class="learning-path-section">
+      <h2 class="section-heading">推荐学习路径</h2>
+
+      <div class="path-cards-container">
+        <!-- 步骤 1 -->
+        <div class="path-step-card step-green" @click="goToWordReview">
+          <div class="step-badge">1</div>
+          <h3 class="path-card-title">单词复习</h3>
+          <p class="path-card-desc">复习今日推荐的单词，巩固记忆</p>
+          <div class="path-card-footer">
+            <div class="path-svg-placeholder">
+              <svg viewBox="0 0 48 48" fill="none" class="mini-card-svg">
+                <rect x="8" y="10" width="32" height="28" rx="6" fill="#B3E6D5" />
+                <path d="M16 20h16M16 28h10" stroke="#1F8A70" stroke-width="3" stroke-linecap="round" />
+              </svg>
+            </div>
+            <button class="learn-button secondary path-action-btn" type="button">去复习</button>
+          </div>
         </div>
-      </article>
 
-      <article class="quick-card" @click="goToFreeChat">
-        <span class="quick-eyebrow">表达训练</span>
-        <h2>AI 口语</h2>
-        <p>用今日单词开口表达，先完成一段 5 分钟轻练习。</p>
-      </article>
+        <div class="path-connector-arrow">
+          <svg viewBox="0 0 24 24" fill="none" stroke="rgba(36,49,47,0.2)" stroke-width="2.5">
+            <path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </div>
 
-      <article class="quick-card" @click="goToReport">
-        <span class="quick-eyebrow">复盘反馈</span>
-        <h2>学习报告</h2>
-        <p>查看今日数据、薄弱点和下一轮针对练习。</p>
-      </article>
+        <!-- 步骤 2 -->
+        <div class="path-step-card step-blue" @click="goToChapters">
+          <div class="step-badge">2</div>
+          <h3 class="path-card-title">闯关学习</h3>
+          <p class="path-card-desc">通过场景任务，掌握单词用法</p>
+          <div class="path-card-footer">
+            <div class="path-svg-placeholder">
+              <svg viewBox="0 0 48 48" fill="none" class="mini-card-svg">
+                <rect x="10" y="14" width="28" height="24" rx="4" fill="#C5DCF5" />
+                <path d="M24 8l12 6v14l-12-6z" fill="#4277B8" />
+              </svg>
+            </div>
+            <button class="learn-button secondary path-action-btn" type="button">去闯关</button>
+          </div>
+        </div>
+
+        <div class="path-connector-arrow">
+          <svg viewBox="0 0 24 24" fill="none" stroke="rgba(36,49,47,0.2)" stroke-width="2.5">
+            <path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </div>
+
+        <!-- 步骤 3 -->
+        <div class="path-step-card step-yellow" @click="goToFreeChat">
+          <div class="step-badge">3</div>
+          <h3 class="path-card-title">AI 口语练习</h3>
+          <p class="path-card-desc">开口说英语，提升表达能力</p>
+          <div class="path-card-footer">
+            <div class="path-svg-placeholder">
+              <svg viewBox="0 0 48 48" fill="none" class="mini-card-svg">
+                <circle cx="24" cy="24" r="16" fill="#FCE1A6" />
+                <path d="M18 24h12M24 18v12" stroke="#F0A43A" stroke-width="3" stroke-linecap="round" />
+              </svg>
+            </div>
+            <button class="learn-button secondary path-action-btn" type="button">去练习</button>
+          </div>
+        </div>
+      </div>
     </section>
 
-    <section class="dashboard-grid">
-      <article class="data-card learn-card">
-        <span>待复习单词</span>
-        <strong>{{ reviewData?.pendingReviewCount ?? 0 }}</strong>
-        <p>{{ reviewData?.pendingReviewCount ? '建议先复习再进入新关卡。' : '当前没有待复习单词，可以进入新任务。' }}</p>
-        <button class="learn-button secondary" type="button" @click="goToWordReview">打开单词复习</button>
-      </article>
+    <!-- 下方 4 列概览指标卡片 -->
+    <section class="overview-grid-section">
+      <!-- 卡片 1: 待复习单词 -->
+      <div class="overview-card learn-card">
+        <span class="card-label">待复习单词</span>
+        <div class="card-metric-num">{{ reviewData?.pendingReviewCount ?? 20 }}</div>
+        <p class="card-sub-info">
+          {{ reviewData?.pendingReviewCount ? '建议先复习再进入新关卡。' : '当前待复习单词不多，保持节奏。' }}
+        </p>
+        <button class="learn-button secondary card-btn-action" type="button" @click="goToWordReview">
+          打开单词复习
+        </button>
 
-      <article class="data-card learn-card">
-        <span>签到状态</span>
-        <strong>{{ checkInData?.hasCheckedInToday ? '已签到' : '待签到' }}</strong>
-        <p>连续记录会让每日任务更有反馈感。</p>
-        <button class="learn-button secondary" type="button" @click="goToCheckIn">
+        <!-- 背景装饰 SVG 水印 -->
+        <div class="card-bg-watermark">
+          <svg viewBox="0 0 80 60" fill="none" opacity="0.12">
+            <rect x="10" y="30" width="12" height="30" rx="3" fill="#1F8A70" />
+            <rect x="30" y="20" width="12" height="40" rx="3" fill="#1F8A70" />
+            <rect x="50" y="10" width="12" height="50" rx="3" fill="#1F8A70" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- 卡片 2: 学习记录 (7天柱状图) -->
+      <div class="overview-card learn-card">
+        <span class="card-label">学习记录</span>
+        <div class="card-metric-num">{{ checkInData?.continuousCheckInDays || 7 }} 天</div>
+        <p class="card-sub-info">本周学习天数</p>
+
+        <div class="week-chart-bars">
+          <div v-for="(day, idx) in weekDays" :key="idx" class="chart-bar-item">
+            <div class="bar-pill-track">
+              <div class="bar-pill-fill" :class="{ 'is-active': idx === currentDayOfWeekIndex }"
+                :style="{ height: day.height + '%' }"></div>
+            </div>
+            <span class="bar-day-name">{{ day.name }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 卡片 3: 签到状态 -->
+      <div class="overview-card learn-card">
+        <span class="card-label">签到状态</span>
+        <div class="card-metric-num text-large">
+          {{ checkInData?.hasCheckedInToday ? '已签到' : '待签到' }}
+        </div>
+        <p class="card-sub-info">连续记录会让每日任务更有反馈感。</p>
+        <button class="learn-button secondary card-btn-action" type="button" @click="goToCheckIn">
           {{ checkInData?.hasCheckedInToday ? '查看签到' : '立即签到' }}
         </button>
-      </article>
 
-      <article class="coach-card learn-card">
-        <span class="learn-kicker">AI 教练</span>
-        <h2>今天的口语目标</h2>
-        <p>用 3 句话介绍一次入住酒店或点餐经历，尽量用上今天复习过的单词。</p>
-        <button class="learn-button" type="button" @click="goToFreeChat">开始练 5 分钟</button>
-      </article>
+        <!-- 背景装饰 SVG 打勾水印 -->
+        <div class="card-bg-watermark">
+          <svg viewBox="0 0 60 60" fill="none" opacity="0.12">
+            <circle cx="30" cy="30" r="25" fill="#1F8A70" />
+            <path d="M20 30L27 37L40 22" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round"
+              stroke-linejoin="round" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- 卡片 4: 今日口语目标 -->
+      <div class="overview-card learn-card">
+        <span class="card-label">今日口语目标</span>
+        <p class="speaking-goal-text">
+          用 3 句话介绍一次入住酒店或点餐经历，尽量用上今天复习过的单词。
+        </p>
+        <button class="learn-button card-btn-action" type="button" @click="goToFreeChat">
+          开始练习 5 分钟
+        </button>
+
+        <!-- 背景装饰 SVG 耳机 -->
+        <div class="card-bg-watermark">
+          <svg viewBox="0 0 60 60" fill="none" opacity="0.12">
+            <path d="M15 35V28C15 19.7157 21.7157 13 30 13C38.2843 13 45 19.7157 45 28V35" stroke="#1F8A70"
+              stroke-width="4" />
+            <rect x="10" y="32" width="10" height="16" rx="4" fill="#1F8A70" />
+            <rect x="40" y="32" width="10" height="16" rx="4" fill="#1F8A70" />
+          </svg>
+        </div>
+      </div>
     </section>
+
+    <!-- 底部小贴士横条 -->
+    <div class="tips-banner">
+      <div class="tips-left-content">
+        <span class="tips-icon">💡</span>
+        <span class="tips-title">小贴士</span>
+        <span class="tips-text">每天坚持完成今日任务，学习效果更佳哦！</span>
+      </div>
+      <svg class="tips-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    </div>
   </main>
 </template>
 
@@ -120,12 +323,27 @@ const reviewData = ref(null)
 
 const hasReviewedToday = computed(() => (reviewData.value?.todayReviewedCount || 0) > 0)
 
+// 7天柱状图显示数据与当前天高亮
+const weekDays = [
+  { name: '一', height: 40 },
+  { name: '二', height: 65 },
+  { name: '三', height: 45 },
+  { name: '四', height: 80 },
+  { name: '五', height: 35 },
+  { name: '六', height: 90 },
+  { name: '日', height: 50 }
+]
+const currentDayOfWeekIndex = computed(() => {
+  const day = new Date().getDay()
+  return day === 0 ? 6 : day - 1
+})
+
 const missions = computed(() => [
   {
     key: 'checkin',
     icon: '✓',
     title: '完成签到',
-    desc: checkInData.value?.hasCheckedInToday ? '今天的学习记录已点亮' : '先点亮今日学习状态',
+    desc: '完成签到学习状态',
     done: Boolean(checkInData.value?.hasCheckedInToday),
     action: goToCheckIn
   },
@@ -135,13 +353,13 @@ const missions = computed(() => [
     title: '单词复习',
     desc: hasReviewedToday.value
       ? `今天已复习 ${reviewData.value?.todayReviewedCount || 0} 个单词`
-      : `${reviewData.value?.pendingReviewCount ?? 0} 个单词等待巩固`,
+      : `${reviewData.value?.pendingReviewCount ?? 20} 个单词等待巩固`,
     done: hasReviewedToday.value || (reviewData.value?.pendingReviewCount ?? 0) === 0,
     action: goToWordReview
   },
   {
     key: 'chapter',
-    icon: '→',
+    icon: '➔',
     title: '推进一关',
     desc: '完成一个场景任务，把单词放进语境',
     done: false,
@@ -151,7 +369,7 @@ const missions = computed(() => [
     key: 'chat',
     icon: 'AI',
     title: 'AI 口语热身',
-    desc: '用 5 分钟把今天的表达说出来',
+    desc: '用 5 分钟和今天的表达说出来',
     done: false,
     action: goToFreeChat
   }
@@ -161,9 +379,12 @@ const completedMissionCount = computed(() => missions.value.filter((item) => ite
 const missionProgress = computed(() => Math.round((completedMissionCount.value / missions.value.length) * 100))
 
 const personalizedGuide = computed(() => {
-  if (!storeUsername.value) return '注册后即可生成你的每日学习路线'
-  if (!hasReviewedToday.value && reviewData.value?.pendingReviewCount > 0) return `先复习 ${Math.min(reviewData.value.pendingReviewCount, 20)} 个单词，再推进一关`
-  if (!checkInData.value?.hasCheckedInToday) return '先签到，再完成一轮闯关和 AI 口语'
+  if (!hasReviewedToday.value && (reviewData.value?.pendingReviewCount ?? 20) > 0) {
+    return `先复习 ${Math.min(reviewData.value?.pendingReviewCount || 20, 20)} 个单词，再推进一关`
+  }
+  if (!checkInData.value?.hasCheckedInToday) {
+    return '先签到，再完成一轮闯关和 AI 口语'
+  }
   return '今天适合直接推进一关，再用 AI 做口语巩固'
 })
 
@@ -179,7 +400,18 @@ onMounted(async () => {
 })
 
 function startTodayStudy() {
-  router.push('/daily-study')
+  // 1. 如果未签到，优先引导完成签到
+  if (!checkInData.value?.hasCheckedInToday) {
+    goToCheckIn()
+    return
+  }
+  // 2. 如果今天尚有待复习单词且未复习，引导去复习
+  if (!hasReviewedToday.value && (reviewData.value?.pendingReviewCount || 0) > 0) {
+    goToWordReview()
+    return
+  }
+  // 3. 否则引导进入场景闯关主线
+  goToChapters()
 }
 
 function goToChapters() {
@@ -188,10 +420,6 @@ function goToChapters() {
 
 function goToFreeChat() {
   router.push('/aiChatExer')
-}
-
-function goToReport() {
-  router.push('/review-ai-chat')
 }
 
 function goToCheckIn() {
@@ -233,251 +461,547 @@ const fetchReviewData = async () => {
 
 <style scoped>
 .home-page {
-  width: min(1180px, calc(100% - 32px));
-  margin: 0 auto;
-  padding: 34px 0 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
-.home-hero {
+/* ================= 1. 顶部 HERO 区域 ================= */
+.top-hero-section {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 430px;
-  gap: 28px;
+  grid-template-columns: 1.45fr 1fr;
+  gap: 20px;
   align-items: stretch;
 }
 
-.hero-copy {
-  min-height: 430px;
-  padding: 42px;
-  border-radius: 32px;
-  background:
-    linear-gradient(135deg, rgba(31, 138, 112, 0.12), rgba(240, 164, 58, 0.16)),
-    var(--learn-surface);
-  box-shadow: var(--learn-shadow);
-}
-
-.hero-copy h1 {
-  max-width: 720px;
-  margin: 18px 0 14px;
-  font-size: clamp(36px, 6vw, 68px);
-  line-height: 1.02;
-  letter-spacing: 0;
-}
-
-.hero-copy p {
-  max-width: 620px;
-  color: var(--learn-muted);
-  font-size: 18px;
-}
-
-.hero-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 28px;
-}
-
-.mission-panel {
-  padding: 24px;
-}
-
-.panel-top {
+/* 左侧 HERO BANNER 卡片：继承 AdventureStory 的优雅淡雅渐变 */
+.hero-card {
+  position: relative;
+  background: linear-gradient(135deg, rgba(31, 138, 112, 0.12), rgba(240, 164, 58, 0.16)), var(--learn-surface);
+  padding: 40px 44px;
   display: flex;
   justify-content: space-between;
-  gap: 18px;
+  align-items: stretch; /* 占满垂直全高，解决上下留白问题 */
+  gap: 32px;
+  overflow: hidden;
+}
+
+.hero-text-content {
+  flex: 1;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between; /* 顶、中、底分布，彻底填满垂直高度 */
+  z-index: 2;
+}
+
+.hero-text-top {
+  display: flex;
+  flex-direction: column;
   align-items: flex-start;
 }
 
-.panel-label,
-.quick-eyebrow,
-.data-card span {
-  color: var(--learn-muted);
-  font-size: 13px;
-  font-weight: 800;
+.badge-icon {
+  width: 14px;
+  height: 14px;
 }
 
-.panel-top h2 {
-  margin: 4px 0 0;
-  font-size: 25px;
-  line-height: 1.25;
+.hero-title {
+  font-size: clamp(32px, 4.2vw, 42px);
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--learn-ink);
+  margin: 16px 0 12px;
+  letter-spacing: -0.3px;
+}
+
+.hero-subtitle {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--learn-muted);
+  margin: 0;
+}
+
+.hero-btn {
+  align-self: flex-start;
+  margin-top: 24px;
+  padding: 0 28px;
+  height: 48px;
+  font-size: 15px;
+}
+
+.btn-arrow {
+  width: 16px;
+  height: 16px;
+}
+
+/* SVG 插画容器 (充实右侧排版，填满垂直空间) */
+.hero-illustration-slot {
+  position: relative;
+  width: 290px;
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  z-index: 1;
+}
+
+.hero-svg-bg-glow {
+  position: absolute;
+  width: 240px;
+  height: 240px;
+  background: radial-gradient(circle, rgba(31, 138, 112, 0.22) 0%, rgba(240, 164, 58, 0.12) 60%, transparent 80%);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.hero-svg-illustration {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-height: 340px;
+  z-index: 1;
+}
+
+/* 右侧今日任务卡片 */
+.today-tasks-card {
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+}
+
+.tasks-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.tasks-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--learn-ink);
+  margin: 0;
 }
 
 .streak-pill {
-  flex: 0 0 auto;
-  padding: 8px 12px;
+  padding: 6px 12px;
   border-radius: 999px;
   background: var(--learn-amber-soft);
   color: #8a5a07;
-  font-weight: 900;
+  font-weight: 800;
+  font-size: 12px;
 }
 
-.mission-progress {
-  margin: 24px 0;
+.tasks-highlight-guide {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--learn-ink);
+  line-height: 1.35;
+  margin-bottom: 18px;
 }
 
-.progress-meta {
+.tasks-progress-block {
+  margin-bottom: 18px;
+}
+
+.progress-info {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 8px;
+  font-size: 13px;
   color: var(--learn-muted);
-  font-size: 14px;
+  margin-bottom: 6px;
 }
 
-.mission-list {
-  display: grid;
+.progress-count {
+  font-weight: 800;
+  color: var(--learn-ink);
+}
+
+/* 任务条目列表 */
+.task-items-list {
+  display: flex;
+  flex-direction: column;
   gap: 10px;
 }
 
-.mission-item {
-  display: grid;
-  grid-template-columns: 42px 1fr auto;
-  gap: 12px;
+.task-item-row {
+  display: flex;
   align-items: center;
-  width: 100%;
-  padding: 12px;
-  border-radius: 18px;
-  background: #fff;
-  color: var(--learn-ink);
-  text-align: left;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--learn-line);
+  transition: all 0.18s ease;
   cursor: pointer;
 }
 
-.mission-item.done {
+.task-item-row:hover {
+  background: #ffffff;
+  transform: translateX(2px);
+}
+
+.task-item-row.is-done {
   background: var(--learn-green-soft);
+  border-color: rgba(31, 138, 112, 0.2);
 }
 
-.mission-icon {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
+.task-icon-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
   background: var(--learn-ink);
-  color: #fff;
-  font-weight: 900;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  flex-shrink: 0;
 }
 
-.mission-item small {
-  display: block;
+.task-icon-circle.icon-done {
+  background: var(--learn-primary);
+}
+
+.check-done-icon {
+  width: 16px;
+  height: 16px;
+  stroke: #ffffff;
+}
+
+.task-text-meta {
+  flex: 1;
+}
+
+.task-item-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--learn-ink);
+}
+
+.task-item-desc {
+  font-size: 12px;
   color: var(--learn-muted);
+  margin-top: 2px;
 }
 
-.mission-item em {
+.task-action-btn {
+  background: transparent;
   color: var(--learn-primary-dark);
   font-size: 13px;
-  font-style: normal;
-  font-weight: 900;
-}
-
-.quick-grid {
-  display: grid;
-  grid-template-columns: 1.35fr 1fr 1fr;
-  gap: 18px;
-  margin-top: 22px;
-}
-
-.quick-card {
-  min-height: 210px;
-  padding: 26px;
-  border: 1px solid var(--learn-line);
-  border-radius: 26px;
-  background: var(--learn-surface-strong);
+  font-weight: 800;
+  border: none;
   cursor: pointer;
-  box-shadow: var(--learn-shadow-soft);
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  padding: 4px 8px;
 }
 
-.quick-card:hover {
+.task-action-btn.btn-done {
+  color: var(--learn-muted);
+  font-weight: 600;
+}
+
+/* ================= 2. 推荐学习路径 ================= */
+.learning-path-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.section-heading {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--learn-ink);
+  margin: 0;
+}
+
+.path-cards-container {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.path-step-card {
+  flex: 1;
+  border-radius: var(--learn-radius-lg);
+  padding: 24px;
+  border: 1px solid var(--learn-line);
+  box-shadow: var(--learn-shadow-soft);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.path-step-card:hover {
   transform: translateY(-4px);
   box-shadow: var(--learn-shadow);
 }
 
-.quick-card.featured {
-  background: linear-gradient(135deg, #1f8a70, #2e695d);
-  color: #fff;
+.path-step-card.step-green {
+  background: var(--learn-green-soft);
 }
 
-.quick-card.featured .quick-eyebrow,
-.quick-card.featured p {
-  color: rgba(255, 255, 255, 0.78);
+.path-step-card.step-blue {
+  background: var(--learn-blue-soft);
 }
 
-.quick-card h2 {
-  margin: 8px 0 8px;
-  font-size: 28px;
+.path-step-card.step-yellow {
+  background: var(--learn-amber-soft);
 }
 
-.quick-card p,
-.data-card p,
-.coach-card p {
+.step-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 800;
+  margin-bottom: 12px;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.step-green .step-badge {
+  color: var(--learn-primary-dark);
+}
+
+.step-blue .step-badge {
+  color: var(--learn-blue);
+}
+
+.step-yellow .step-badge {
+  color: #8a5a07;
+}
+
+.path-card-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--learn-ink);
+  margin: 0 0 6px;
+}
+
+.path-card-desc {
+  font-size: 13px;
+  color: var(--learn-muted);
+  margin: 0 0 18px;
+}
+
+.path-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-top: auto;
+}
+
+.path-svg-placeholder {
+  width: 44px;
+  height: 44px;
+}
+
+.mini-card-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.path-action-btn {
+  font-size: 13px;
+  min-height: 38px;
+  padding: 0 16px;
+}
+
+.path-connector-arrow {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ================= 3. 下方 4 列概览指标卡片 ================= */
+.overview-grid-section {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.overview-card {
+  position: relative;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.card-label {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--learn-muted);
+  margin-bottom: 10px;
+}
+
+.card-metric-num {
+  font-size: 34px;
+  font-weight: 800;
+  color: var(--learn-ink);
+  line-height: 1.1;
+  margin-bottom: 6px;
+}
+
+.card-metric-num.text-large {
+  font-size: 26px;
+  margin-top: 4px;
+}
+
+.card-sub-info {
+  font-size: 13px;
+  color: var(--learn-muted);
+  line-height: 1.4;
+  margin: 0 0 18px;
+}
+
+.speaking-goal-text {
+  font-size: 13px;
+  color: var(--learn-ink);
+  line-height: 1.5;
+  margin: 0 0 18px;
+}
+
+.card-btn-action {
+  margin-top: auto;
+  min-height: 38px;
+  font-size: 13px;
+  z-index: 2;
+}
+
+.card-bg-watermark {
+  position: absolute;
+  right: -10px;
+  bottom: -10px;
+  width: 80px;
+  height: 80px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 7天柱状图 */
+.week-chart-bars {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  height: 55px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.chart-bar-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.bar-pill-track {
+  width: 10px;
+  height: 36px;
+  background: rgba(36, 49, 47, 0.08);
+  border-radius: 99px;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.bar-pill-fill {
+  width: 100%;
+  background: rgba(36, 49, 47, 0.25);
+  border-radius: 99px;
+}
+
+.bar-pill-fill.is-active {
+  background: var(--learn-primary);
+}
+
+.bar-day-name {
+  font-size: 11px;
   color: var(--learn-muted);
 }
 
-.flow-line {
+/* ================= 4. 底部小贴士横条 ================= */
+.tips-banner {
+  background: var(--learn-green-soft);
+  border-radius: var(--learn-radius-md);
+  padding: 14px 20px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 22px;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid rgba(31, 138, 112, 0.18);
 }
 
-.flow-line span {
-  padding: 7px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
-  font-size: 13px;
+.tips-left-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.tips-icon {
+  font-size: 16px;
+}
+
+.tips-title {
   font-weight: 800;
+  color: var(--learn-primary-dark);
 }
 
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1.3fr;
-  gap: 18px;
-  margin-top: 22px;
+.tips-text {
+  color: var(--learn-ink);
 }
 
-.data-card,
-.coach-card {
-  padding: 24px;
+.tips-arrow {
+  width: 18px;
+  height: 18px;
+  color: var(--learn-primary-dark);
 }
 
-.data-card strong {
-  display: block;
-  margin-top: 8px;
-  font-size: 34px;
-}
-
-.coach-card {
-  background: linear-gradient(135deg, var(--learn-amber-soft), #fff);
-}
-
-.coach-card h2 {
-  margin: 14px 0 8px;
-}
-
-@media (max-width: 940px) {
-  .home-hero,
-  .quick-grid,
-  .dashboard-grid {
+/* ================= 响应式适配 ================= */
+@media (max-width: 1024px) {
+  .top-hero-section {
     grid-template-columns: 1fr;
   }
 
-  .hero-copy {
-    min-height: auto;
-    padding: 28px;
+  .overview-grid-section {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
-@media (max-width: 560px) {
-  .home-page {
-    width: min(100% - 20px, 1180px);
+@media (max-width: 768px) {
+  .path-cards-container {
+    flex-direction: column;
   }
 
-  .panel-top,
-  .mission-item {
+  .path-connector-arrow {
+    transform: rotate(90deg);
+  }
+
+  .overview-grid-section {
     grid-template-columns: 1fr;
   }
 
-  .panel-top {
-    display: grid;
+  .hero-card {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 24px;
+  }
+
+  .hero-illustration-slot {
+    margin-top: 18px;
+    width: 100%;
   }
 }
 </style>

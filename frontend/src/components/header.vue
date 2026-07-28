@@ -13,7 +13,7 @@
     </button>
 
     <nav class="main-nav" :class="{ open: showMobileNav }">
-      <router-link to="/daily-study">今日任务</router-link>
+      <router-link to="/">首页</router-link>
       <router-link to="/adventure-story">闯关学习</router-link>
       <router-link to="/review-ai-chat">学习报告</router-link>
       <router-link to="/aiChatExer">AI 口语</router-link>

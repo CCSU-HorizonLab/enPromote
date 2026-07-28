@@ -42,9 +42,7 @@ const router = createRouter({
         // 三大核心学习路径
         {
             path: '/daily-study',
-            name: 'DailyStudy',
-            component: () => import('../views/DailyStudy.vue'),
-            meta: { requiresAuth: true }
+            redirect: '/'
         },
         {
             path: '/adventure-story',
