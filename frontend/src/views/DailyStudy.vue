@@ -23,8 +23,8 @@
       </article>
       <article class="metric-card learn-card">
         <span>待复习单词</span>
-        <strong>{{ reviewData.pendingReviewCount || 0 }}</strong>
-        <p>优先清掉待复习，再学新内容</p>
+        <strong>{{ isNewUserNoWords ? 0 : (reviewData.pendingReviewCount || 0) }}</strong>
+        <p>{{ isNewUserNoWords ? '你还没学习任何单词，快去练手吧' : '优先清掉待复习，再学新内容' }}</p>
       </article>
       <article class="metric-card learn-card">
         <span>今日主线</span>
@@ -56,11 +56,21 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { getUserInfo, user as storeUser } from '@/stores/userStore'
 import { getCheckInStatus } from '@/api/checkin'
 import { getReviewWords } from '@/api/word'
 import { getDailyStudyReport } from '@/api/report'
 
 const router = useRouter()
+const userInfo = ref(null)
+
+const totalWords = computed(() => {
+  if (userInfo.value?.totalWords !== undefined) return userInfo.value.totalWords
+  if (storeUser.value?.totalWords !== undefined) return storeUser.value.totalWords
+  return 0
+})
+
+const isNewUserNoWords = computed(() => totalWords.value === 0)
 
 const checkInData = ref({
   continuousCheckInDays: 0,
@@ -77,58 +87,74 @@ const reviewData = ref({
 const hasReviewedToday = computed(() => (reviewData.value.todayReviewedCount || 0) > 0)
 
 const tasks = computed(() => {
-  const reviewDone = hasReviewedToday.value || (reviewData.value.pendingReviewCount || 0) === 0
+  let reviewDone = false
+  let reviewDesc = ''
+
+  if (isNewUserNoWords.value) {
+    reviewDesc = '你还没学习任何单词，快去练手吧'
+    reviewDone = false
+  } else if (hasReviewedToday.value) {
+    reviewDesc = `今天已复习 ${reviewData.value.todayReviewedCount || 0} 个单词，剩余待复习可明天继续推进。`
+    reviewDone = true
+  } else {
+    const pending = reviewData.value.pendingReviewCount || 0
+    if (pending > 0) {
+      reviewDesc = `当前有 ${pending} 个单词等待复习。`
+      reviewDone = false
+    } else {
+      reviewDesc = '今天暂无待复习单词。'
+      reviewDone = true
+    }
+  }
 
   return [
     {
-    key: 'checkin',
-    index: '01',
-    type: '习惯养成',
-    title: '每日签到',
-    desc: '点亮今天的学习记录，保持连续反馈。',
-    completed: checkInData.value.hasCheckedInToday,
-    recommended: !checkInData.value.hasCheckedInToday,
-    status: '待完成',
-    cta: checkInData.value.hasCheckedInToday ? '查看签到' : '去签到',
-    action: goToCheckIn
-  },
-  {
-    key: 'review',
-    index: '02',
-    type: '记忆巩固',
-    title: '单词复习',
-    desc: hasReviewedToday.value
-      ? `今天已复习 ${reviewData.value.todayReviewedCount || 0} 个单词，剩余待复习可明天继续推进。`
-      : `当前有 ${reviewData.value.pendingReviewCount || 0} 个单词等待复习。`,
-    completed: reviewDone,
-    recommended: !reviewDone && (reviewData.value.pendingReviewCount || 0) > 0,
-    status: '建议完成',
-    cta: reviewDone ? '查看单词' : '开始复习',
-    action: goToWordReview
-  },
-  {
-    key: 'chapter',
-    index: '03',
-    type: '主线闯关',
-    title: '推进一个场景关卡',
-    desc: '用酒店或餐厅场景串起词汇、听力和实战对话。',
-    completed: false,
-    recommended: reviewDone,
-    status: '建议完成',
-    cta: '去闯关',
-    action: goToChapters
-  },
-  {
-    key: 'chat',
-    index: '04',
-    type: '表达输出',
-    title: 'AI 口语热身',
-    desc: '用 5 分钟把今日词汇说进真实表达里。',
-    completed: false,
-    recommended: false,
-    status: '可选加练',
-    cta: '开始对话',
-    action: goToFreeChat
+      key: 'checkin',
+      index: '01',
+      type: '习惯养成',
+      title: '每日签到',
+      desc: '点亮今天的学习记录，保持连续反馈。',
+      completed: checkInData.value.hasCheckedInToday,
+      recommended: !checkInData.value.hasCheckedInToday,
+      status: '待完成',
+      cta: checkInData.value.hasCheckedInToday ? '查看签到' : '去签到',
+      action: goToCheckIn
+    },
+    {
+      key: 'review',
+      index: '02',
+      type: '记忆巩固',
+      title: '单词复习',
+      desc: reviewDesc,
+      completed: reviewDone,
+      recommended: !reviewDone && (isNewUserNoWords.value || (reviewData.value.pendingReviewCount || 0) > 0),
+      status: isNewUserNoWords.value ? '待开始' : '建议完成',
+      cta: reviewDone ? '查看单词' : (isNewUserNoWords.value ? '去学单词' : '开始复习'),
+      action: isNewUserNoWords.value ? goToChapters : goToWordReview
+    },
+    {
+      key: 'chapter',
+      index: '03',
+      type: '主线闯关',
+      title: '推进一个场景关卡',
+      desc: '用酒店或餐厅场景串起词汇、听力和实战对话。',
+      completed: false,
+      recommended: reviewDone || isNewUserNoWords.value,
+      status: '建议完成',
+      cta: '去闯关',
+      action: goToChapters
+    },
+    {
+      key: 'chat',
+      index: '04',
+      type: '表达输出',
+      title: 'AI 口语热身',
+      desc: '用 5 分钟把今日词汇说进真实表达里。',
+      completed: false,
+      recommended: false,
+      status: '可选加练',
+      cta: '开始对话',
+      action: goToFreeChat
     }
   ]
 })
@@ -168,7 +194,12 @@ const fetchReviewData = async () => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  try {
+    userInfo.value = await getUserInfo()
+  } catch (error) {
+    console.error('获取用户信息失败:', error)
+  }
   fetchCheckInStatus()
   fetchReviewData()
 })

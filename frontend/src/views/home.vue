@@ -217,9 +217,13 @@
       <!-- 卡片 1: 待复习单词 -->
       <div class="overview-card learn-card">
         <span class="card-label">待复习单词</span>
-        <div class="card-metric-num">{{ reviewData?.pendingReviewCount ?? 20 }}</div>
+        <div class="card-metric-num">{{ isNewUserNoWords ? 0 : (reviewData?.pendingReviewCount ?? 0) }}</div>
         <p class="card-sub-info">
-          {{ reviewData?.pendingReviewCount ? '建议先复习再进入新关卡。' : '当前待复习单词不多，保持节奏。' }}
+          {{
+            isNewUserNoWords
+              ? '你还没学习任何单词，快去练手吧。'
+              : ((reviewData?.pendingReviewCount ?? 0) > 0 ? '建议先复习再进入新关卡。' : '当前待复习单词不多，保持节奏。')
+          }}
         </p>
         <button class="learn-button secondary card-btn-action" type="button" @click="goToWordReview">
           打开单词复习
@@ -311,7 +315,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { getUserInfo, username as storeUsername } from '@/stores/userStore'
+import { getUserInfo, user as storeUser, username as storeUsername } from '@/stores/userStore'
 import { getCheckInStatus } from '@/api/checkin'
 import { getReviewWords } from '@/api/word'
 import { getDailyStudyReport } from '@/api/report'
@@ -320,7 +324,15 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 const checkInData = ref(null)
 const reviewData = ref(null)
+const userInfo = ref(null)
 
+const totalWords = computed(() => {
+  if (userInfo.value?.totalWords !== undefined) return userInfo.value.totalWords
+  if (storeUser.value?.totalWords !== undefined) return storeUser.value.totalWords
+  return 0
+})
+
+const isNewUserNoWords = computed(() => totalWords.value === 0)
 const hasReviewedToday = computed(() => (reviewData.value?.todayReviewedCount || 0) > 0)
 
 // 7天柱状图显示数据与当前天高亮
@@ -338,49 +350,72 @@ const currentDayOfWeekIndex = computed(() => {
   return day === 0 ? 6 : day - 1
 })
 
-const missions = computed(() => [
-  {
-    key: 'checkin',
-    icon: '✓',
-    title: '完成签到',
-    desc: '完成签到学习状态',
-    done: Boolean(checkInData.value?.hasCheckedInToday),
-    action: goToCheckIn
-  },
-  {
-    key: 'review',
-    icon: 'Aa',
-    title: '单词复习',
-    desc: hasReviewedToday.value
-      ? `今天已复习 ${reviewData.value?.todayReviewedCount || 0} 个单词`
-      : `${reviewData.value?.pendingReviewCount ?? 20} 个单词等待巩固`,
-    done: hasReviewedToday.value || (reviewData.value?.pendingReviewCount ?? 0) === 0,
-    action: goToWordReview
-  },
-  {
-    key: 'chapter',
-    icon: '➔',
-    title: '推进一关',
-    desc: '完成一个场景任务，把单词放进语境',
-    done: false,
-    action: goToChapters
-  },
-  {
-    key: 'chat',
-    icon: 'AI',
-    title: 'AI 口语热身',
-    desc: '用 5 分钟和今天的表达说出来',
-    done: false,
-    action: goToFreeChat
+const missions = computed(() => {
+  let reviewDesc = ''
+  let reviewDone = false
+
+  if (isNewUserNoWords.value) {
+    reviewDesc = '你还没学习任何单词，快去练手吧'
+    reviewDone = false
+  } else if (hasReviewedToday.value) {
+    reviewDesc = `今天已复习 ${reviewData.value?.todayReviewedCount || 0} 个单词`
+    reviewDone = true
+  } else {
+    const pending = reviewData.value?.pendingReviewCount ?? 0
+    if (pending > 0) {
+      reviewDesc = `${pending} 个单词等待巩固`
+      reviewDone = false
+    } else {
+      reviewDesc = '今日暂无待复习单词'
+      reviewDone = true
+    }
   }
-])
+
+  return [
+    {
+      key: 'checkin',
+      icon: '✓',
+      title: '完成签到',
+      desc: '完成签到学习状态',
+      done: Boolean(checkInData.value?.hasCheckedInToday),
+      action: goToCheckIn
+    },
+    {
+      key: 'review',
+      icon: 'Aa',
+      title: '单词复习',
+      desc: reviewDesc,
+      done: reviewDone,
+      action: goToWordReview
+    },
+    {
+      key: 'chapter',
+      icon: '➔',
+      title: '推进一关',
+      desc: '完成一个场景任务，把单词放进语境',
+      done: false,
+      action: goToChapters
+    },
+    {
+      key: 'chat',
+      icon: 'AI',
+      title: 'AI 口语热身',
+      desc: '用 5 分钟和今天的表达说出来',
+      done: false,
+      action: goToFreeChat
+    }
+  ]
+})
 
 const completedMissionCount = computed(() => missions.value.filter((item) => item.done).length)
 const missionProgress = computed(() => Math.round((completedMissionCount.value / missions.value.length) * 100))
 
 const personalizedGuide = computed(() => {
-  if (!hasReviewedToday.value && (reviewData.value?.pendingReviewCount ?? 20) > 0) {
-    return `先复习 ${Math.min(reviewData.value?.pendingReviewCount || 20, 20)} 个单词，再推进一关`
+  if (isNewUserNoWords.value) {
+    return '你还没学习任何单词，快去练手吧'
+  }
+  if (!hasReviewedToday.value && (reviewData.value?.pendingReviewCount ?? 0) > 0) {
+    return `先复习 ${Math.min(reviewData.value?.pendingReviewCount || 0, 20)} 个单词，再推进一关`
   }
   if (!checkInData.value?.hasCheckedInToday) {
     return '先签到，再完成一轮闯关和 AI 口语'
@@ -390,10 +425,11 @@ const personalizedGuide = computed(() => {
 
 onMounted(async () => {
   try {
-    const userInfo = await getUserInfo()
-    if (userInfo) {
-      await Promise.all([fetchCheckInStatus(), fetchReviewData()])
+    const info = await getUserInfo()
+    if (info) {
+      userInfo.value = info
     }
+    await Promise.all([fetchCheckInStatus(), fetchReviewData()])
   } catch (error) {
     console.log('首页用户状态获取失败:', error)
   }
@@ -405,12 +441,17 @@ function startTodayStudy() {
     goToCheckIn()
     return
   }
-  // 2. 如果今天尚有待复习单词且未复习，引导去复习
+  // 2. 如果还没学过单词，引导去闯关/学习单词
+  if (isNewUserNoWords.value) {
+    goToChapters()
+    return
+  }
+  // 3. 如果今天尚有待复习单词且未复习，引导去复习
   if (!hasReviewedToday.value && (reviewData.value?.pendingReviewCount || 0) > 0) {
     goToWordReview()
     return
   }
-  // 3. 否则引导进入场景闯关主线
+  // 4. 否则引导进入场景闯关主线
   goToChapters()
 }
 
