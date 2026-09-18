@@ -106,8 +106,8 @@ app.use(express.static(publicPath));
 function requireAuth(req, res, next) {
     // 白名单路由 - 不需要登录即可访问
     const publicPaths = [
-        '/api/auth/login', 
-        '/api/auth/register', 
+        '/api/auth/login',
+        '/api/auth/register',
         '/word',
         '/api/oral',  // 口语评测接口
         '/api/oral/config',
@@ -245,8 +245,4 @@ process.on('unhandledRejection', (reason, promise) => {
         reason: reason,
         promise: promise
     });
-<<<<<<< HEAD
 });
-=======
-});
->>>>>>> f0391fff2a9dd50b37567ccb43177e60496022d8

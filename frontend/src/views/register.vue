@@ -6,23 +6,9 @@
                 <!-- 用户名 -->
                 <div class="form-group">
                     <label for="username">用户名</label>
-<<<<<<< HEAD
-                    <input
-                        type="text"
-                        id="username"
-                        name="username"
-                        v-model="username"
-=======
-                    <input 
-                        type="text" 
-                        id="username" 
-                        name="username" 
-                        v-model="username" 
->>>>>>> f0391fff2a9dd50b37567ccb43177e60496022d8
-                        :class="{ 'is-invalid': usernameTouched && !usernameValid }"
-                        @blur="usernameTouched = true"
-                        required
-                    >
+                    <input type="text" id="username" name="username" v-model="username"
+                        :class="{ 'is-invalid': usernameTouched && !usernameValid }" @blur="usernameTouched = true"
+                        required>
                     <span v-if="usernameTouched && !usernameValid" class="error-feedback">
                         请输入用户名
                     </span>
@@ -32,44 +18,18 @@
                 <div class="form-group">
                     <label for="password">密码</label>
                     <div class="password-input-wrapper">
-<<<<<<< HEAD
-                        <input
-                            :type="showPassword ? 'text' : 'password'"
-                            id="password"
-                            name="password"
-                            v-model="password"
-=======
-                        <input 
-                            :type="showPassword ? 'text' : 'password'" 
-                            id="password" 
-                            name="password" 
-                            v-model="password" 
->>>>>>> f0391fff2a9dd50b37567ccb43177e60496022d8
-                            :class="{ 'is-invalid': passwordTouched && !passwordValid }"
-                            @blur="passwordTouched = true"
-                            required
-                        >
-<<<<<<< HEAD
-                        <button
-                            type="button"
-                            class="password-toggle-btn"
-                            @click="showPassword = !showPassword"
-                            :title="showPassword ? '隐藏密码' : '显示密码'"
-                        >
-=======
-                        <button 
-                            type="button" 
-                            class="password-toggle-btn" 
-                            @click="showPassword = !showPassword"
-                            :title="showPassword ? '隐藏密码' : '显示密码'"
-                        >
-                            <!-- 眼睛图标 -->
->>>>>>> f0391fff2a9dd50b37567ccb43177e60496022d8
+                        <input :type="showPassword ? 'text' : 'password'" id="password" name="password"
+                            v-model="password" :class="{ 'is-invalid': passwordTouched && !passwordValid }"
+                            @blur="passwordTouched = true" required>
+                        <button type="button" class="password-toggle-btn" @click="showPassword = !showPassword"
+                            :title="showPassword ? '隐藏密码' : '显示密码'">
                             <svg v-if="showPassword" viewBox="0 0 24 24">
-                                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                                <path
+                                    d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
                             </svg>
                             <svg v-else viewBox="0 0 24 24">
-                                <path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.82l2.92 2.92c1.51-1.39 2.7-3.14 3.44-5.12-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 2.2 0 4.26-.6 6.04-1.63l.47.47 2.66 2.66 1.27-1.27L3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/>
+                                <path
+                                    d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.82l2.92 2.92c1.51-1.39 2.7-3.14 3.44-5.12-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 2.2 0 4.26-.6 6.04-1.63l.47.47 2.66 2.66 1.27-1.27L3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z" />
                             </svg>
                         </button>
                     </div>
@@ -84,8 +44,11 @@
                             <span :class="strengthClass" class="strength-label">{{ strengthText }}</span>
                         </div>
                         <div class="password-strength-bars">
-                            <div class="strength-bar" :class="{ 'weak': strengthScore >= 1, 'medium': strengthScore >= 2, 'strong': strengthScore >= 3 }"></div>
-                            <div class="strength-bar" :class="{ 'medium': strengthScore >= 2, 'strong': strengthScore >= 3 }"></div>
+                            <div class="strength-bar"
+                                :class="{ 'weak': strengthScore >= 1, 'medium': strengthScore >= 2, 'strong': strengthScore >= 3 }">
+                            </div>
+                            <div class="strength-bar"
+                                :class="{ 'medium': strengthScore >= 2, 'strong': strengthScore >= 3 }"></div>
                             <div class="strength-bar" :class="{ 'strong': strengthScore >= 3 }"></div>
                         </div>
                     </div>
@@ -95,43 +58,20 @@
                 <div class="form-group">
                     <label for="confirm-password">确认密码</label>
                     <div class="password-input-wrapper">
-<<<<<<< HEAD
-                        <input
-                            :type="showConfirmPassword ? 'text' : 'password'"
-                            id="confirm-password"
-                            name="confirmPassword"
-=======
-                        <input 
-                            :type="showConfirmPassword ? 'text' : 'password'" 
-                            id="confirm-password" 
-                            name="confirmPassword" 
->>>>>>> f0391fff2a9dd50b37567ccb43177e60496022d8
-                            v-model="confirmPassword"
+                        <input :type="showConfirmPassword ? 'text' : 'password'" id="confirm-password"
+                            name="confirmPassword" v-model="confirmPassword"
                             :class="{ 'is-invalid': confirmPasswordTouched && !confirmPasswordValid }"
-                            @blur="confirmPasswordTouched = true"
-                            required
-                        >
-<<<<<<< HEAD
-                        <button
-                            type="button"
-                            class="password-toggle-btn"
+                            @blur="confirmPasswordTouched = true" required>
+                        <button type="button" class="password-toggle-btn"
                             @click="showConfirmPassword = !showConfirmPassword"
-                            :title="showConfirmPassword ? '隐藏密码' : '显示密码'"
-                        >
-=======
-                        <button 
-                            type="button" 
-                            class="password-toggle-btn" 
-                            @click="showConfirmPassword = !showConfirmPassword"
-                            :title="showConfirmPassword ? '隐藏密码' : '显示密码'"
-                        >
-                            <!-- 眼睛图标 -->
->>>>>>> f0391fff2a9dd50b37567ccb43177e60496022d8
+                            :title="showConfirmPassword ? '隐藏密码' : '显示密码'">
                             <svg v-if="showConfirmPassword" viewBox="0 0 24 24">
-                                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                                <path
+                                    d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
                             </svg>
                             <svg v-else viewBox="0 0 24 24">
-                                <path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.82l2.92 2.92c1.51-1.39 2.7-3.14 3.44-5.12-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 2.2 0 4.26-.6 6.04-1.63l.47.47 2.66 2.66 1.27-1.27L3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/>
+                                <path
+                                    d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.82l2.92 2.92c1.51-1.39 2.7-3.14 3.44-5.12-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 2.2 0 4.26-.6 6.04-1.63l.47.47 2.66 2.66 1.27-1.27L3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z" />
                             </svg>
                         </button>
                     </div>
@@ -140,26 +80,13 @@
                     </span>
                 </div>
 
-<<<<<<< HEAD
                 <!-- 邮箱注册 -->
                 <div class="form-group">
                     <label for="email">邮箱</label>
                     <div class="input-group">
-                        <input
-                            type="email"
-                            id="email"
-                            name="email"
-                            v-model="email"
-                            placeholder="请输入邮箱地址"
-                            :class="{ 'is-invalid': emailTouched && !emailValid }"
-                            @blur="emailTouched = true"
-                        >
-                        <button
-                            type="button"
-                            class="btn-send-code"
-                            :disabled="contactLoading"
-                            @click="sendEmailCode"
-                        >
+                        <input type="email" id="email" name="email" v-model="email" placeholder="请输入邮箱地址"
+                            :class="{ 'is-invalid': emailTouched && !emailValid }" @blur="emailTouched = true">
+                        <button type="button" class="btn-send-code" :disabled="contactLoading" @click="sendEmailCode">
                             {{ emailCountdown > 0 ? `${emailCountdown}秒` : '发送验证码' }}
                         </button>
                     </div>
@@ -173,23 +100,14 @@
 
                 <div class="form-group">
                     <label for="email-code">验证码</label>
-                    <input
-                        type="text"
-                        id="email-code"
-                        name="emailCode"
-                        v-model="emailCode"
-                        placeholder="请输入6位验证码"
-                        :class="{ 'is-invalid': emailCodeTouched && !emailCodeValid }"
-                        @blur="emailCodeTouched = true"
-                        maxlength="6"
-                    >
+                    <input type="text" id="email-code" name="emailCode" v-model="emailCode" placeholder="请输入6位验证码"
+                        :class="{ 'is-invalid': emailCodeTouched && !emailCodeValid }" @blur="emailCodeTouched = true"
+                        maxlength="6">
                     <span v-if="emailCodeTouched && !emailCodeValid" class="error-feedback">
                         请输入6位验证码
                     </span>
                 </div>
 
-=======
->>>>>>> f0391fff2a9dd50b37567ccb43177e60496022d8
                 <div class="form-actions">
                     <button type="submit" class="btn-primary" :disabled="loading || !isFormValid">
                         <span class="btn-content">
@@ -199,7 +117,8 @@
                     </button>
                 </div>
                 <div class="form-footer">
-                    <p>已有账号？<RouterLink :to="{ name: 'Login' }">立即登录</RouterLink></p>
+                    <p>已有账号？<RouterLink :to="{ name: 'Login' }">立即登录</RouterLink>
+                    </p>
                 </div>
             </form>
         </div>
@@ -207,11 +126,7 @@
 </template>
 <script setup>
 import { ref, computed } from 'vue';
-<<<<<<< HEAD
 import { register, sendEmailCode as apiSendEmailCode } from '@/api/auth';
-=======
-import { register } from '@/api/auth';
->>>>>>> f0391fff2a9dd50b37567ccb43177e60496022d8
 import { useRouter } from 'vue-router';
 import { toast } from '@/utils/toastService';
 
@@ -221,7 +136,6 @@ const username = ref('');
 const password = ref('');
 const confirmPassword = ref('');
 
-<<<<<<< HEAD
 const email = ref('');
 const emailCode = ref('');
 
@@ -239,16 +153,6 @@ const emailCodeTouched = ref(false);
 const emailCountdown = ref(0);
 const emailCodeError = ref('');
 
-=======
-// 交互与状态控制
-const showPassword = ref(false);
-const showConfirmPassword = ref(false);
-const loading = ref(false);
-const usernameTouched = ref(false);
-const passwordTouched = ref(false);
-const confirmPasswordTouched = ref(false);
-
->>>>>>> f0391fff2a9dd50b37567ccb43177e60496022d8
 // 校验规则
 const usernameValid = computed(() => username.value.trim().length > 0);
 const passwordValid = computed(() => password.value.length >= 6);
@@ -268,7 +172,6 @@ const confirmPasswordError = computed(() => {
 const strengthScore = computed(() => {
     const pwd = password.value;
     if (pwd.length < 6) return 0;
-<<<<<<< HEAD
 
     let score = 1;
 
@@ -284,25 +187,6 @@ const strengthScore = computed(() => {
         score = 3;
     }
 
-=======
-    
-    let score = 1; // 长度大于等于 6 获得基础分 1
-    
-    const hasLetters = /[a-zA-Z]/.test(pwd);
-    const hasNumbers = /[0-9]/.test(pwd);
-    const hasSpecial = /[^a-zA-Z0-9]/.test(pwd);
-    
-    // 如果同时包含字母和数字，得 2 分
-    if (hasLetters && hasNumbers) {
-        score = 2;
-    }
-    
-    // 包含字母、数字且长度 >= 8，或包含特殊字符，得 3 分
-    if ((hasLetters && hasNumbers && hasSpecial) || (hasLetters && hasNumbers && pwd.length >= 8)) {
-        score = 3;
-    }
-    
->>>>>>> f0391fff2a9dd50b37567ccb43177e60496022d8
     return score;
 });
 
@@ -322,7 +206,6 @@ const strengthClass = computed(() => {
     return '';
 });
 
-<<<<<<< HEAD
 // 邮箱校验
 const emailValid = computed(() => {
     if (!email.value) return false;
@@ -398,32 +281,13 @@ function clickRegister() {
         return;
     }
 
-=======
-const isFormValid = computed(() => {
-    return usernameValid.value && passwordValid.value && confirmPasswordValid.value;
-});
-
-function clickRegister() {
-    if (!isFormValid.value) {
-        usernameTouched.value = true;
-        passwordTouched.value = true;
-        confirmPasswordTouched.value = true;
-        toast.error('请检查输入信息');
-        return;
-    }
-
->>>>>>> f0391fff2a9dd50b37567ccb43177e60496022d8
     loading.value = true;
     const data = {
         username: username.value,
         password: password.value,
-<<<<<<< HEAD
         confirmPassword: confirmPassword.value,
         email: email.value,
         verificationCode: emailCode.value
-=======
-        confirmPassword: confirmPassword.value
->>>>>>> f0391fff2a9dd50b37567ccb43177e60496022d8
     };
 
     register(data)
