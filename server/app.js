@@ -245,4 +245,8 @@ process.on('unhandledRejection', (reason, promise) => {
         reason: reason,
         promise: promise
     });
+<<<<<<< HEAD
 });
+=======
+});
+>>>>>>> f0391fff2a9dd50b37567ccb43177e60496022d8

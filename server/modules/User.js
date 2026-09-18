@@ -79,7 +79,7 @@ let userSchema = new mongoose.Schema({
             customsP: { type: Boolean, default: false },
             coverP: { type: Boolean, default: false }
         },
-        default: function() {
+        default: function () {
             return new Map([
                 ['A', { level: 1, score: 0, completedWords: 0, wordP: false, spellP: false, listenP: false, customsP: false, coverP: false }],
                 ['B', { level: 1, score: 0, completedWords: 0, wordP: false, spellP: false, listenP: false, customsP: false, coverP: false }]
