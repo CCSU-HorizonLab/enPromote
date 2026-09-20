@@ -1,5 +1,29 @@
 <div align="center">
 
+# 🌟 WordWise (enPromote)
+### 基于大模型与语音评测引擎的下一代沉浸式英语学习平台
+**Next-Gen AI-Powered Immersive English Learning & Oral Assessment Platform**
+
+[![Vue 3](https://img.shields.io/badge/Vue-3.5+-4FC08D?style=flat-square&logo=vuedotjs&logoColor=white)](https://vuejs.org/) [![TypeScript](https://img.shields.io/badge/TypeScript-5.8+-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![Vite](https://img.shields.io/badge/Vite-6.2+-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vitejs.dev/) [![Node.js](https://img.shields.io/badge/Node.js-18+-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org/) [![Express](https://img.shields.io/badge/Express-5.1+-000000?style=flat-square&logo=express&logoColor=white)](https://expressjs.com/) [![MongoDB](https://img.shields.io/badge/MongoDB-8.0+-47A248?style=flat-square&logo=mongodb&logoColor=white)](https://www.mongodb.com/) 
+[![DeepSeek](https://img.shields.io/badge/AI-DeepSeek%20%2F%20OpenAI-blue?style=flat-square&logo=openai&logoColor=white)](https://deepseek.com/)  [![iFlytek](https://img.shields.io/badge/ISE-iFlytek%20Speech-FF6B00?style=flat-square)](https://www.xfyun.cn/) [![License](https://img.shields.io/badge/License-ISC-green?style=flat-square)](LICENSE)
+
+<p align="center">
+  <b>让背单词不再枯燥，用真实语境与 AI 交互重构语言学习全链路</b>
+  <br />
+  从「机械识记」到「场景闯关」，从「不敢开口」到「AI 实战对话 & 智能口语发音评测」
+</p>
+
+[✨ 核心特性](#-核心特性) •
+[🕹️ 学习结构与玩法](#️-学习结构与玩法) •
+[🏗️ 系统架构与技术栈](#️-系统架构与技术栈) •
+[🚀 快速启动](#-快速启动) •
+[⚙️ 环境变量配置](#️-环境变量配置) •
+[🗺️ 路线图](#️-产品演进与路线图-roadmap)
+
+---
+
+</div>
+
 ## 📖 项目简介
 
 **WordWise (enPromote)** 是一款专为中文母语学习者打造的**多维沉浸式英语学习平台**。
@@ -10,25 +34,25 @@
 
 ## ✨ 核心特性
 
-| 模块                           | 核心亮点                                                                           | 带来价值                                       |
-| :----------------------------- | :--------------------------------------------------------------------------------- | :--------------------------------------------- |
-| 🎯**5步场景闯关**        | 词汇初识 ➔ 拼写肌肉记忆 ➔ 纯听力辨音 ➔ AI自适应出题 ➔ 目标词实战会话           | 单个场景 10-15 分钟闭环，拒绝学完就忘          |
-| 🎭**沉浸式角色剧情**     | 故事驱动的支线剧情任务，融合多轮对话、交互拼写、听力理解与剧本抉择                 | 游戏化体验，如同玩 RPG 般在剧情中自然运用英语  |
-| 🎙️**AI 口语智能测评**  | 接入**科大讯飞语音评测 (ISE)** 引擎，支持流式录音、音素级/重音诊断与纠音建议 | 告别哑巴英语，毫秒级反馈流利度、完整度与发音分 |
-| 🤖**自适应大模型驱动**   | 基于 DeepSeek / 阿里百炼 DashScope，动态根据用户遗忘点出题，并扮演真实 NPC 对话    | 千人千面的练习题目与生动有趣的实战拟真陪练     |
-| 📊**科学复盘与记忆曲线** | 艾宾浩斯记忆模型排程、闪卡（FlashCard）复习、雷达能力诊断与每日学习报告            | 学习进度与弱项一目了然，用数据驱动自律         |
-| 👥**社交激励与学习圈**   | 好友申请/接受、学习排行榜、好友能力雷达对比与即时交流                              | 告别单打独斗，在良性竞争与互动中持续坚持       |
+| 模块 | 核心亮点 | 带来价值 |
+| :--- | :--- | :--- |
+| 🎯 **5步场景闯关** | 词汇初识 ➔ 拼写肌肉记忆 ➔ 纯听力辨音 ➔ AI自适应出题 ➔ 目标词实战会话 | 单个场景 10-15 分钟闭环，拒绝学完就忘 |
+| 🎭 **沉浸式角色剧情** | 故事驱动的支线剧情任务，融合多轮对话、交互拼写、听力理解与剧本抉择 | 游戏化体验，如同玩 RPG 般在剧情中自然运用英语 |
+| 🎙️ **AI 口语智能测评** | 接入**科大讯飞语音评测 (ISE)** 引擎，支持流式录音、音素级/重音诊断与纠音建议 | 告别哑巴英语，毫秒级反馈流利度、完整度与发音分 |
+| 🤖 **自适应大模型驱动** | 基于 DeepSeek / 阿里百炼 DashScope，动态根据用户遗忘点出题，并扮演真实 NPC 对话 | 千人千面的练习题目与生动有趣的实战拟真陪练 |
+| 📊 **科学复盘与记忆曲线** | 艾宾浩斯记忆模型排程、闪卡（FlashCard）复习、雷达能力诊断与每日学习报告 | 学习进度与弱项一目了然，用数据驱动自律 |
+| 👥 **社交激励与学习圈** | 好友申请/接受、学习排行榜、好友能力雷达对比与即时交流 | 告别单打独斗，在良性竞争与互动中持续坚持 |
 
 ---
 
 ## 🕹️ 学习结构与玩法
 
 WordWise 围绕两条核心主线展开：**「闯关体系」** 与 **「AI 口语测评」**。
-
-![1789908960065](image/README/1789908960065.png)
+<p align="center">
+  <img src="image/README/1789908960065.png" alt="1789908960065" />
+</p>
 
 ### 1. 关卡式场景闯关（固定 5 关递进）
-
 * **关卡 1：词汇学习 (Vocabulary Learning)**
   * 真实场景（机场、酒店、面试、点餐等）高频词汇精讲；
   * 提供纯正发音音频、词性分析与场景例句。
@@ -43,26 +67,26 @@ WordWise 围绕两条核心主线展开：**「闯关体系」** 与 **「AI 口
   * **机制规则**：用户需在对话中灵活且正确地调用本关的目标单词，AI 会即时校验任务完成度并给予对话复盘。
 
 ### 2. 角色剧情模式 (Story Mode)
-
 * 区别于单元式的 5 关训练，剧情模式将语言学习融入跌宕起伏的互动式故事线；
 * 每一个章节由**剧情对话、线索拼写、听力捕获、情节阅读**等任务组成，通关即可解锁故事后续与隐藏分支。
 
 ### 3. AI 口语测评 (Oral Assessment)
-
 * 支持**浏览器端麦克风实时高保真音频采集**（转换为 16bit / 16kHz 单声道 PCM 格式）；
 * 深度集成**科大讯飞语音评测（ISE）大模型/WebSocket接口**，针对句式跟读提供包括声学发音、完整度、语速、重音在内的专业四维评分；
 * 内置 **AI 口语教练（Oral Coach）**，针对发音薄弱点智能生成针对性纠音技巧；
 * 配套完善的 **Mock ISE 模式**，无真实 Key 时仍可实现本地全流程丝滑调试。
 
-
+---
 
 ## 🏗️ 系统架构与技术栈
 
 ### 技术栈全景
+
 <p align="center">
   <img src="image/README/1789909035740.png" alt="1789909035740" />
 </p>
 
+---
 
 ## 📂 项目目录结构
 
@@ -105,9 +129,7 @@ enPromote/
 ## 🚀 快速启动
 
 ### 1. 环境准备
-
 确保您的本地开发环境满足以下要求：
-
 * **Node.js**: >= 18.0.0
 * **MongoDB**: >= 6.0 (本地运行或云端实例)
 * **包管理器**: npm (>= 9.0) 或 pnpm / yarn
@@ -170,7 +192,6 @@ npm install
 打开两个终端窗口分别运行：
 
 #### 终端 1：启动后端服务
-
 ```bash
 cd server
 npm start
@@ -178,7 +199,6 @@ npm start
 ```
 
 #### 终端 2：启动前端工程
-
 ```bash
 cd frontend
 npm run dev
@@ -192,18 +212,14 @@ npm run dev
 ## 📦 生产部署建议
 
 ### 前端构建
-
 ```bash
 cd frontend
 npm run build
 ```
-
 构建文件将输出到 `frontend/dist/`，可使用 Nginx、Vercel 或 Caddy 进行静态资源托管，并在 Nginx 中配置 `/api/` 转发至后端端口。
 
 ### 后端生产启动
-
 推荐使用 **PM2** 进行守护进程管理与负载均衡：
-
 ```bash
 cd server
 npm install -g pm2
@@ -216,9 +232,9 @@ NODE_ENV=production pm2 start app.js --name "wordwise-backend"
 
 根据深度产品架构评审与学习科学理论，平台正在规划并推进以下优化升级：
 
-- [X] **5关递进学习微循环** 与 **任务式 AI 场景对话**
-- [X] **科大讯飞 ISE 口语评测集成** 与 **Mock 开发支持**
-- [X] **多支线角色剧情系统** 与 **多模态任务执行器**
+- [x] **5关递进学习微循环** 与 **任务式 AI 场景对话**
+- [x] **科大讯飞 ISE 口语评测集成** 与 **Mock 开发支持**
+- [x] **多支线角色剧情系统** 与 **多模态任务执行器**
 - [ ] **🎯 闯关与口语深度打通 (P0)**：口语跟读与实战测评自动引用当前关卡核心词汇，形成「听说读写用」一体化闭环
 - [ ] **⚡ 自适应跳关机制 (P0)**：引入 30 秒前置水平轻量快测，对高掌握度学员智能跳过前置重复步骤，直奔实战
 - [ ] **📝 交互对话复盘卡 (P1)**：实战对话后生成雷达评价，标明“目标词地道运用度”与“语法/用词润色建议”
@@ -230,7 +246,6 @@ NODE_ENV=production pm2 start app.js --name "wordwise-backend"
 ## 🤝 贡献与交流
 
 欢迎提交 Issue 或 Pull Request 来帮助我们改进 WordWise！
-
 1. Fork 本项目仓库
 2. 创建您的特性分支 (`git checkout -b feature/AmazingFeature`)
 3. 提交您的修改 (`git commit -m 'Add some AmazingFeature'`)
