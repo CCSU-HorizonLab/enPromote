@@ -8,6 +8,7 @@ const morgan = require('morgan');
 const { port, host } = require('./config/serve');
 const db = require('./config/db');
 const { logger, accessLogStream, logApiError } = require('./utils/logger');
+const { requireAuth } = require('./middleware/auth');
 
 // 路由引入
 const { router: getwordRouter } = require('./router/third_part/getword');
@@ -102,34 +103,6 @@ app.use('/avatars', express.static(avatarsPath, {
 // 其他静态文件
 app.use(express.static(publicPath));
 
-// 认证中间件
-function requireAuth(req, res, next) {
-    // 白名单路由 - 不需要登录即可访问
-    const publicPaths = [
-        '/api/auth/login', 
-        '/api/auth/register', 
-        '/word',
-        '/api/oral',  // 口语评测接口
-        '/api/oral/config',
-        '/api/oral/evaluate',
-        '/api/oral/batch-evaluate'
-    ];
-    if (publicPaths.some(path => req.originalUrl.startsWith(path))) {
-        return next();
-    }
-
-    // 检查会话
-    if (req.session?.isLogin && req.session?.userid) {
-        next();
-    } else {
-        res.status(401).json({
-            code: 401,
-            message: '未登录',
-            redirect: '/login'
-        });
-    }
-}
-
 // 路由配置
 app.get('/', (req, res) => {
     res.send('Hello World');
@@ -147,12 +120,13 @@ app.get('/test-static', (req, res) => {
     });
 });
 
-// 先注册认证路由（不需要认证）
-app.use('/api/auth', authRouter);
+// 口语评测接口保持公开访问
+app.use('/api/oral', oralRouter);
 
-// 应用认证中间件到其他需要认证的路由
+// 其余 API 统一要求有效登录状态
 app.use('/api', requireAuth);
 
+app.use('/api/auth', authRouter);
 app.use('/api/word', getwordRouter, wordRouter);
 app.use('/api/vocabulary', vocabularyRouter);
 app.use('/api/vocabulary-learning', vocabularyLearningRouter);
@@ -172,7 +146,6 @@ app.use('/api/study-record', studyRecordRouter);
 app.use('/api/friends', friendsRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/chat', chatRouter);
-app.use('/api/oral', oralRouter);
 app.use('/api/user', userProgressRouter);
 
 // 404处理

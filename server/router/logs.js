@@ -2,27 +2,14 @@ const express = require('express');
 const router = express.Router();
 const LogViewer = require('../utils/logViewer');
 const { logger, logUserAction } = require('../utils/logger');
+const { requireAdmin } = require('../middleware/auth');
 
 const logViewer = new LogViewer();
 
-// 管理员权限检查中间件
-const checkAdminPermission = (req, res, next) => {
-    // 这里可以实现更复杂的权限检查逻辑
-    const userId = req.session?.userid;
-    if (!userId) {
-        return res.status(401).json({
-            code: 401,
-            message: '请先登录'
-        });
-    }
-    
-    // 简单的管理员检查（实际项目中应该从数据库检查用户角色）
-    // 这里假设第一个注册的用户是管理员，或者可以通过其他方式标识
-    next();
-};
+router.use(requireAdmin);
 
 // 获取错误日志
-router.get('/errors', checkAdminPermission, (req, res) => {
+router.get('/errors', (req, res) => {
     try {
         const lines = parseInt(req.query.lines) || 100;
         const logs = logViewer.getErrorLogs(lines);
@@ -44,7 +31,7 @@ router.get('/errors', checkAdminPermission, (req, res) => {
 });
 
 // 获取访问日志
-router.get('/access', checkAdminPermission, (req, res) => {
+router.get('/access', (req, res) => {
     try {
         const lines = parseInt(req.query.lines) || 100;
         const logs = logViewer.getAccessLogs(lines);
@@ -66,7 +53,7 @@ router.get('/access', checkAdminPermission, (req, res) => {
 });
 
 // 获取组合日志
-router.get('/combined', checkAdminPermission, (req, res) => {
+router.get('/combined', (req, res) => {
     try {
         const lines = parseInt(req.query.lines) || 100;
         const logs = logViewer.getCombinedLogs(lines);
@@ -88,7 +75,7 @@ router.get('/combined', checkAdminPermission, (req, res) => {
 });
 
 // 搜索日志
-router.get('/search', checkAdminPermission, (req, res) => {
+router.get('/search', (req, res) => {
     try {
         const { keyword, type = 'combined', lines = 100 } = req.query;
         
@@ -118,7 +105,7 @@ router.get('/search', checkAdminPermission, (req, res) => {
 });
 
 // 获取日志统计
-router.get('/stats', checkAdminPermission, (req, res) => {
+router.get('/stats', (req, res) => {
     try {
         const stats = logViewer.getLogStats();
         
@@ -139,7 +126,7 @@ router.get('/stats', checkAdminPermission, (req, res) => {
 });
 
 // 按日期获取日志
-router.get('/date/:date', checkAdminPermission, (req, res) => {
+router.get('/date/:date', (req, res) => {
     try {
         const { date } = req.params;
         const logs = logViewer.getLogsByDate('combined', date);
@@ -161,7 +148,7 @@ router.get('/date/:date', checkAdminPermission, (req, res) => {
 });
 
 // 按级别获取日志
-router.get('/level/:level', checkAdminPermission, (req, res) => {
+router.get('/level/:level', (req, res) => {
     try {
         const { level } = req.params;
         const logs = logViewer.getLogsByLevel(level);
@@ -183,7 +170,7 @@ router.get('/level/:level', checkAdminPermission, (req, res) => {
 });
 
 // 清理旧日志
-router.post('/clean', checkAdminPermission, (req, res) => {
+router.post('/clean', (req, res) => {
     try {
         const { daysToKeep = 30 } = req.body;
         logViewer.cleanOldLogs(daysToKeep);

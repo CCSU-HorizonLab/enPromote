@@ -350,6 +350,15 @@ router.post('/login', async (req, res) => {
         }
 
         if (passwordValid) {
+            const accountStatus = user.status || 'active';
+            if (accountStatus !== 'active') {
+                logUserAction(req, 'LOGIN_FAILED', { username, userId: user._id, reason: `账号状态：${accountStatus}` });
+                return res.json({
+                    code: 403,
+                    message: accountStatus === 'disabled' ? '账号已被禁用，无法登录' : '账号当前不可登录'
+                });
+            }
+
             // 确保 session 存在
             if (!req.session) {
                 req.session = {};
