@@ -115,7 +115,7 @@ aiChatSessionSchema.index({ userid: 1, sessionId: 1 });
 aiChatSessionSchema.index({ userid: 1, status: 1 });
 
 // 实例方法：检查是否完成
-aiChatSessionSchema.methods.checkCompletion = function() {
+aiChatSessionSchema.methods.checkCompletion = function () {
     const progress = this.progress;
     const totalTasks = progress.totalTasks || this.tasks.length || 0;
     const minTasksCompleted = Math.max(1, Math.floor(totalTasks * 0.6));
@@ -124,16 +124,16 @@ aiChatSessionSchema.methods.checkCompletion = function() {
 };
 
 // 实例方法：更新进度
-aiChatSessionSchema.methods.updateProgress = function() {
+aiChatSessionSchema.methods.updateProgress = function () {
     this.progress.tasksCompleted = this.tasks.filter(task => task.completed).length;
     this.progress.wordsUsed = this.usedWords.length;
     this.progress.turnCount = this.messages.filter(msg => msg.role === 'user').length;
 };
 
 // 实例方法：添加消息并分析单词使用
-aiChatSessionSchema.methods.addMessage = function(role, content, taskId = null) {
+aiChatSessionSchema.methods.addMessage = function (role, content, taskId = null) {
     const wordsUsed = this.extractUsedWords(content);
-    
+
     this.messages.push({
         role,
         content,
@@ -141,7 +141,7 @@ aiChatSessionSchema.methods.addMessage = function(role, content, taskId = null) 
         wordsUsed,
         timestamp: new Date()
     });
-    
+
     // 更新已使用单词列表
     if (role === 'user' && wordsUsed.length > 0) {
         wordsUsed.forEach(word => {
@@ -149,7 +149,7 @@ aiChatSessionSchema.methods.addMessage = function(role, content, taskId = null) 
                 this.usedWords.push(word);
             }
         });
-        
+
         // 更新任务进度
         if (taskId) {
             const task = this.tasks.find(t => t.id === taskId);
@@ -159,7 +159,7 @@ aiChatSessionSchema.methods.addMessage = function(role, content, taskId = null) 
                         task.usedWords.push(word);
                     }
                 });
-                
+
                 // 检查任务是否完成
                 if (!task.completed && task.usedWords.length >= task.minWords) {
                     task.completed = true;
@@ -168,46 +168,46 @@ aiChatSessionSchema.methods.addMessage = function(role, content, taskId = null) 
             }
         }
     }
-    
+
     this.updateProgress();
 };
 
 // 实例方法：从文本中提取使用的练习单词
-aiChatSessionSchema.methods.extractUsedWords = function(text) {
+aiChatSessionSchema.methods.extractUsedWords = function (text) {
     const allRequiredWords = [];
     this.tasks.forEach(task => {
         allRequiredWords.push(...task.requiredWords);
     });
-    
+
     const uniqueWords = [...new Set(allRequiredWords)];
     const usedWords = [];
-    
+
     const lowerText = text.toLowerCase();
     uniqueWords.forEach(word => {
         if (lowerText.includes(word.toLowerCase())) {
             usedWords.push(word);
         }
     });
-    
+
     return usedWords;
 };
 
 // 实例方法：生成完成报告
-aiChatSessionSchema.methods.generateCompletionReport = function() {
-    const duration = this.endTime ? 
+aiChatSessionSchema.methods.generateCompletionReport = function () {
+    const duration = this.endTime ?
         Math.round((this.endTime - this.startTime) / (1000 * 60)) : 0;
-    
+
     const tasksCompletedCount = this.progress.tasksCompleted;
     const wordsUsedCount = this.progress.wordsUsed;
     const turnCount = this.progress.turnCount;
-    
+
     let performance = 'needs_improvement';
     let feedback = '';
-    
+
     // 评估表现
     const taskCompletionRate = tasksCompletedCount / this.progress.totalTasks;
     const wordUsageRate = wordsUsedCount / this.completionCriteria.minWordsUsed;
-    
+
     if (taskCompletionRate >= 1 && wordUsageRate >= 1.5) {
         performance = 'excellent';
         feedback = '出色完成！您成功完成了所有任务并熟练使用了练习单词。';
@@ -220,7 +220,7 @@ aiChatSessionSchema.methods.generateCompletionReport = function() {
     } else {
         feedback = '需要更多练习，建议重新尝试或复习相关单词。';
     }
-    
+
     this.completionReport = {
         totalDuration: duration,
         tasksCompletedCount,
@@ -229,7 +229,7 @@ aiChatSessionSchema.methods.generateCompletionReport = function() {
         performance,
         feedback
     };
-    
+
     return this.completionReport;
 };
 

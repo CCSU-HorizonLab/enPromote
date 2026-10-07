@@ -1,4 +1,4 @@
- const mongoose = require('mongoose');
+const mongoose = require('mongoose');
 // 用于记录每一关的信息和结果
 let customPassSchema = new mongoose.Schema({
     userid: {

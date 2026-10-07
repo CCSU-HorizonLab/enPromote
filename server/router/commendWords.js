@@ -17,8 +17,8 @@ router.get('/getReviewWord', async (req, res) => {
         });
     }
     const user = await User.findById(userid);
-    const curSence =  req.query.chapter || user.currentChapter || 'A'; // 支持章节参数;
-     
+    const curSence = req.query.chapter || user.currentChapter || 'A'; // 支持章节参数;
+
     console.log(curSence);
     //找出当前用户的单词
     const userWords = await UserWord

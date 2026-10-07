@@ -46,7 +46,7 @@ const SALT_ROUNDS = 10;
 
 // 判断是否为 bcrypt 哈希（格式 $2a$、$2b$、$2y$）
 function isBcryptHash(str) {
-  return typeof str === 'string' && /^\$2[aby]\$\d{2}\$/.test(str);
+    return typeof str === 'string' && /^\$2[aby]\$\d{2}\$/.test(str);
 }
 // 忘记密码 - 验证邮箱验证码并返回重置页面
 router.post('/forgot-password', async (req, res) => {

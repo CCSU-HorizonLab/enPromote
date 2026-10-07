@@ -200,7 +200,7 @@ router.post('/ai_generate_question', async (req, res) => {
 
         // 优先使用请求参数中的章节，其次使用用户当前章节
         const currentChapter = chapter || user.currentChapter || 'A';
-        
+
         // 验证章节是否存在对应的AI提示词
         if (!aiPromptJson[currentChapter]) {
             return res.json({
@@ -208,12 +208,12 @@ router.post('/ai_generate_question', async (req, res) => {
                 message: `章节 ${currentChapter} 对应的AI提示词不存在`
             });
         }
-        
+
         // 根据章节选择对应的AI提示词
         const aiPromptStr = JSON.stringify(aiPromptJson[currentChapter]);
-        
+
         console.log(`AI题目生成 - 用户: ${userid}, 章节: ${currentChapter}, 来源: ${chapter ? '请求参数' : '用户当前章节'}`);
-        
+
         const completion = await openai.chat.completions.create({
             messages: [
                 { role: "system", content: aiPromptStr }
@@ -222,21 +222,21 @@ router.post('/ai_generate_question', async (req, res) => {
             stream: false
         })
         let custom = completion.choices[0].message.content;
-        
+
         // 清理AI返回的内容，移除可能的markdown格式
         if (custom.includes('```json')) {
             custom = custom.replace(/```json\s*/g, '').replace(/```\s*$/g, '');
         } else if (custom.includes('```')) {
             custom = custom.replace(/```\s*/g, '');
         }
-        
+
         // 去除首尾空白字符
         custom = custom.trim();
-        
+
         logger.info(`用户 ${userid} 在章节 ${currentChapter} 生成AI题目`);
         console.log('AI返回的原始内容:', completion.choices[0].message.content);
         console.log('清理后的内容:', custom);
-        
+
         try {
             const parsedData = JSON.parse(custom);
             res.json({
@@ -595,7 +595,7 @@ router.post('/startTaskChat', async (req, res) => {
         // 创建新的会话
         const sessionId = `${userid}_${Date.now()}`;
         const sceneConfig = aiChatPrompts[scene];
-        
+
         const minTasksCompleted = Math.max(1, Math.floor(sceneConfig.tasks.length * 0.6));
         const newSession = new AiChatSession({
             userid: userid,
@@ -678,19 +678,19 @@ router.post('/taskChat', async (req, res) => {
 
         // 获取场景配置
         const sceneConfig = aiChatPrompts[session.scene];
-        
+
         // 分析用户消息中使用的单词
         const usedWords = session.extractUsedWords(userMessage);
-        
+
         // 确定当前任务
         const currentTask = session.tasks.find(task => !task.completed) || session.tasks[0];
-        
+
         // 添加用户消息
         session.addMessage('user', userMessage, currentTask ? currentTask.id : null);
 
         // 构建AI提示词
         const systemPrompt = buildTaskSystemPrompt(sceneConfig, session, currentTask);
-        
+
         // 调用AI
         const completion = await openai.chat.completions.create({
             messages: [
@@ -717,21 +717,21 @@ router.post('/taskChat', async (req, res) => {
 
         // 检查是否完成
         const isCompleted = session.checkCompletion();
-        
+
         if (isCompleted) {
             session.status = 'completed';
             session.endTime = new Date();
             const report = session.generateCompletionReport();
-            
+
             res.write(`event: completion\n`);
-            res.write(`data: ${JSON.stringify({ 
-                completed: true, 
+            res.write(`data: ${JSON.stringify({
+                completed: true,
                 report: report,
-                progress: session.progress 
+                progress: session.progress
             })}\n\n`);
         } else {
             res.write(`event: progress\n`);
-            res.write(`data: ${JSON.stringify({ 
+            res.write(`data: ${JSON.stringify({
                 progress: session.progress,
                 currentTask: currentTask,
                 usedWords: usedWords
@@ -802,7 +802,7 @@ router.post('/endSession', async (req, res) => {
         session.status = 'abandoned';
         session.endTime = new Date();
         const report = session.generateCompletionReport();
-        
+
         await session.save();
 
         res.json({
@@ -824,15 +824,15 @@ router.post('/endSession', async (req, res) => {
 function buildTaskSystemPrompt(sceneConfig, session, currentTask) {
     const progress = session.progress;
     const completedTasks = session.tasks.filter(task => task.completed);
-    
+
     let prompt = `${sceneConfig.systemPrompt}\n\n`;
     prompt += `${sceneConfig.rolePrompt}\n\n`;
-    
+
     prompt += `当前会话进度：\n`;
     prompt += `- 已完成任务：${progress.tasksCompleted}/${progress.totalTasks}\n`;
     prompt += `- 已使用单词：${progress.wordsUsed}个\n`;
     prompt += `- 对话轮次：${progress.turnCount}\n\n`;
-    
+
     if (currentTask) {
         prompt += `当前任务：${currentTask.name}\n`;
         prompt += `任务描述：${currentTask.description}\n`;
@@ -840,7 +840,7 @@ function buildTaskSystemPrompt(sceneConfig, session, currentTask) {
         prompt += `最少使用：${currentTask.minWords}个单词\n`;
         prompt += `已使用单词：${currentTask.usedWords.join(', ') || '无'}\n\n`;
     }
-    
+
     prompt += `重要规则：\n`;
     prompt += `1. 严格按照${sceneConfig.scene}场景进行对话\n`;
     prompt += `2. 引导用户完成当前任务\n`;
@@ -849,7 +849,7 @@ function buildTaskSystemPrompt(sceneConfig, session, currentTask) {
     prompt += `5. 保持角色一致性，你是${sceneConfig.aiRole}\n`;
     prompt += `6. 对话要自然流畅，不要显得机械化\n`;
     prompt += `7. 当所有必要任务完成后，自然地结束对话\n`;
-    
+
     return prompt;
 }
 
@@ -858,7 +858,7 @@ router.post('/saveChatMessage', async (req, res) => {
     try {
         const { sessionId, role, content } = req.body;
         const userId = req.session.userid;
-        
+
         if (!userId) {
             return res.json({ code: 401, message: '用户未登录' });
         }
@@ -896,10 +896,10 @@ router.post('/saveChatMessage', async (req, res) => {
 
 // 获取对话历史
 router.get('/getChatHistory', async (req, res) => {
-    try {  
+    try {
         const { sessionId } = req.query;
         const userId = req.session.userid;
-        
+
         if (!userId) {
             return res.json({ code: 401, message: '用户未登录' });
         }
@@ -969,7 +969,7 @@ router.delete('/deleteChatSession', async (req, res) => {
         }
 
         const result = await AiChatSession.deleteOne({ sessionId, userid: userId });
-        
+
         if (result.deletedCount === 0) {
             return res.json({ code: 404, message: '会话不存在或无权限删除' });
         }
