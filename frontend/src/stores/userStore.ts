@@ -82,10 +82,8 @@ async function getUserInfo(forceRefresh = false) {
     error.value = null
     const res = await fetchUserInfo()
 
-    if (res.data && res.data.code === 200) {
-      // 后端返回的用户信息直接在res.data中，而不是res.data.data中
-      // 从res.data中提取用户信息字段
-      const { code, message, ...userData } = res.data
+    if (res.data && res.data.success && res.data.code === 200) {
+      const userData = res.data.data
       user.value = userData as UserInfo
       return user.value
     } else {

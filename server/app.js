@@ -9,6 +9,7 @@ const { port, host } = require('./config/serve');
 const db = require('./config/db');
 const { logger, accessLogStream, logApiError } = require('./utils/logger');
 const { requireAuth } = require('./middleware/auth');
+const { apiResponseMiddleware } = require('./utils/apiResponse');
 
 // 路由引入
 const { router: getwordRouter } = require('./router/third_part/getword');
@@ -81,6 +82,7 @@ logger.info('MongoDB session store 初始化成功');
 // 请求体解析
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(apiResponseMiddleware);
 
 // 静态文件服务
 const publicPath = path.resolve(__dirname, '../public');
@@ -102,34 +104,6 @@ app.use('/avatars', express.static(avatarsPath, {
 
 // 其他静态文件
 app.use(express.static(publicPath));
-
-// 认证中间件
-function requireAuth(req, res, next) {
-    // 白名单路由 - 不需要登录即可访问
-    const publicPaths = [
-        '/api/auth/login',
-        '/api/auth/register',
-        '/word',
-        '/api/oral',  // 口语评测接口
-        '/api/oral/config',
-        '/api/oral/evaluate',
-        '/api/oral/batch-evaluate'
-    ];
-    if (publicPaths.some(path => req.originalUrl.startsWith(path))) {
-        return next();
-    }
-
-    // 检查会话
-    if (req.session?.isLogin && req.session?.userid) {
-        next();
-    } else {
-        res.status(401).json({
-            code: 401,
-            message: '未登录',
-            redirect: '/login'
-        });
-    }
-}
 
 // 路由配置
 app.get('/', (req, res) => {
