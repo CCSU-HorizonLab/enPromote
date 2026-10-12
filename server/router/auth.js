@@ -350,6 +350,15 @@ router.post('/login', async (req, res) => {
         }
 
         if (passwordValid) {
+            const accountStatus = user.status || 'active';
+            if (accountStatus !== 'active') {
+                logUserAction(req, 'LOGIN_FAILED', { username, userId: user._id, reason: `账号状态：${accountStatus}` });
+                return res.json({
+                    code: 403,
+                    message: accountStatus === 'disabled' ? '账号已被禁用，无法登录' : '账号当前不可登录'
+                });
+            }
+
             // 确保 session 存在
             if (!req.session) {
                 req.session = {};
@@ -540,7 +549,13 @@ router.post('/register', async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
         // 创建用户对象
-        const userData = { username, password: hashedPassword, email };
+        const userData = {
+            username,
+            password: hashedPassword,
+            email,
+            role: 'user',
+            status: 'active'
+        };
 
         const newUser = new User(userData);
         await newUser.save();
@@ -681,6 +696,10 @@ router.get('/info', async (req, res) => {
             message: '获取用户信息成功',
             _id: user._id,
             username: user.username,
+            role: user.role || 'user',
+            status: user.status || 'active',
+            createdAt: user.createdAt || user.createTime || new Date(),
+            updatedAt: user.updatedAt || new Date(),
             creatTime: user.createTime,
             avatar: user.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default',
             cet4: user.cet4,
