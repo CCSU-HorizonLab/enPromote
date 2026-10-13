@@ -145,72 +145,6 @@
       </div>
     </section>
 
-    <!-- 中间区域：推荐学习路径 -->
-    <section class="learning-path-section">
-      <h2 class="section-heading">推荐学习路径</h2>
-
-      <div class="path-cards-container">
-        <!-- 步骤 1 -->
-        <div class="path-step-card step-green" @click="goToWordReview">
-          <div class="step-badge">1</div>
-          <h3 class="path-card-title">单词复习</h3>
-          <p class="path-card-desc">复习今日推荐的单词，巩固记忆</p>
-          <div class="path-card-footer">
-            <div class="path-svg-placeholder">
-              <svg viewBox="0 0 48 48" fill="none" class="mini-card-svg">
-                <rect x="8" y="10" width="32" height="28" rx="6" fill="#B3E6D5" />
-                <path d="M16 20h16M16 28h10" stroke="#1F8A70" stroke-width="3" stroke-linecap="round" />
-              </svg>
-            </div>
-            <button class="learn-button secondary path-action-btn" type="button">去复习</button>
-          </div>
-        </div>
-
-        <div class="path-connector-arrow">
-          <svg viewBox="0 0 24 24" fill="none" stroke="rgba(36,49,47,0.2)" stroke-width="2.5">
-            <path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </div>
-
-        <!-- 步骤 2 -->
-        <div class="path-step-card step-blue" @click="goToChapters">
-          <div class="step-badge">2</div>
-          <h3 class="path-card-title">闯关学习</h3>
-          <p class="path-card-desc">通过场景任务，掌握单词用法</p>
-          <div class="path-card-footer">
-            <div class="path-svg-placeholder">
-              <svg viewBox="0 0 48 48" fill="none" class="mini-card-svg">
-                <rect x="10" y="14" width="28" height="24" rx="4" fill="#C5DCF5" />
-                <path d="M24 8l12 6v14l-12-6z" fill="#4277B8" />
-              </svg>
-            </div>
-            <button class="learn-button secondary path-action-btn" type="button">去闯关</button>
-          </div>
-        </div>
-
-        <div class="path-connector-arrow">
-          <svg viewBox="0 0 24 24" fill="none" stroke="rgba(36,49,47,0.2)" stroke-width="2.5">
-            <path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </div>
-
-        <!-- 步骤 3 -->
-        <div class="path-step-card step-yellow" @click="goToFreeChat">
-          <div class="step-badge">3</div>
-          <h3 class="path-card-title">AI 口语练习</h3>
-          <p class="path-card-desc">开口说英语，提升表达能力</p>
-          <div class="path-card-footer">
-            <div class="path-svg-placeholder">
-              <svg viewBox="0 0 48 48" fill="none" class="mini-card-svg">
-                <circle cx="24" cy="24" r="16" fill="#FCE1A6" />
-                <path d="M18 24h12M24 18v12" stroke="#F0A43A" stroke-width="3" stroke-linecap="round" />
-              </svg>
-            </div>
-            <button class="learn-button secondary path-action-btn" type="button">去练习</button>
-          </div>
-        </div>
-      </div>
-    </section>
 
     <!-- 下方 4 列概览指标卡片 -->
     <section class="overview-grid-section">
@@ -310,6 +244,9 @@
         <path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
     </div>
+
+    <!-- 签到弹窗 -->
+    <CheckIn v-model="isCheckInModalVisible" @checked-in="handleCheckInSuccess" />
   </main>
 </template>
 
@@ -320,11 +257,13 @@ import { getCheckInStatus } from '@/api/checkin'
 import { getReviewWords } from '@/api/word'
 import { getDailyStudyReport } from '@/api/report'
 import { useRouter } from 'vue-router'
+import CheckIn from '@/components/CheckIn.vue'
 
 const router = useRouter()
 const checkInData = ref(null)
 const reviewData = ref(null)
 const userInfo = ref(null)
+const isCheckInModalVisible = ref(false)
 
 const totalWords = computed(() => {
   if (userInfo.value?.totalWords !== undefined) return userInfo.value.totalWords
@@ -464,7 +403,18 @@ function goToFreeChat() {
 }
 
 function goToCheckIn() {
-  router.push('/checkin')
+  isCheckInModalVisible.value = true
+}
+
+function handleCheckInSuccess(data) {
+  if (data) {
+    checkInData.value = {
+      ...(checkInData.value || {}),
+      ...data,
+      hasCheckedInToday: true
+    }
+  }
+  fetchCheckInStatus()
 }
 
 function goToWordReview() {
@@ -522,7 +472,8 @@ const fetchReviewData = async () => {
   padding: 40px 44px;
   display: flex;
   justify-content: space-between;
-  align-items: stretch; /* 占满垂直全高，解决上下留白问题 */
+  align-items: stretch;
+  /* 占满垂直全高，解决上下留白问题 */
   gap: 32px;
   overflow: hidden;
 }
@@ -532,7 +483,8 @@ const fetchReviewData = async () => {
   max-width: 480px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between; /* 顶、中、底分布，彻底填满垂直高度 */
+  justify-content: space-between;
+  /* 顶、中、底分布，彻底填满垂直高度 */
   z-index: 2;
 }
 

@@ -50,6 +50,9 @@
         </button>
       </article>
     </section>
+
+    <!-- 签到弹窗 -->
+    <CheckIn v-model="isCheckInModalVisible" @checked-in="fetchCheckInStatus" />
   </main>
 </template>
 
@@ -60,9 +63,11 @@ import { getUserInfo, user as storeUser } from '@/stores/userStore'
 import { getCheckInStatus } from '@/api/checkin'
 import { getReviewWords } from '@/api/word'
 import { getDailyStudyReport } from '@/api/report'
+import CheckIn from '@/components/CheckIn.vue'
 
 const router = useRouter()
 const userInfo = ref(null)
+const isCheckInModalVisible = ref(false)
 
 const totalWords = computed(() => {
   if (userInfo.value?.totalWords !== undefined) return userInfo.value.totalWords
@@ -163,7 +168,9 @@ const completedTasks = computed(() => tasks.value.filter((task) => task.complete
 const totalTasks = computed(() => tasks.value.length)
 const completionRate = computed(() => Math.round((completedTasks.value / totalTasks.value) * 100))
 
-const goToCheckIn = () => router.push('/checkin')
+const goToCheckIn = () => {
+  isCheckInModalVisible.value = true
+}
 const goToWordReview = () => router.push('/flashCardReview')
 const goToChapters = () => router.push('/adventure-story')
 const goToFreeChat = () => router.push('/aiChatExer')
