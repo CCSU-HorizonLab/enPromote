@@ -4,6 +4,8 @@ import { getUserInfo as fetchUserInfo } from '@/api/auth'
 interface UserInfo {
   _id:string
   username: string
+  role: 'user' | 'admin' | 'manager'
+  status: 'active' | 'disabled' | 'pending'
   creatTime: string
   avatar: string
   cet4: {
