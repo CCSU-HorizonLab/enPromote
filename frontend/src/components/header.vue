@@ -18,6 +18,7 @@
       <router-link to="/review-ai-chat">学习报告</router-link>
       <router-link to="/aiChatExer">AI 口语</router-link>
       <router-link to="/friends">好友</router-link>
+      <router-link v-if="isAdmin" to="/admin">管理后台</router-link>
     </nav>
 
     <div class="user-actions">
@@ -41,14 +42,15 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { logout } from '@/api/auth'
-import { getUserInfo, isLoggedIn, username as storeUsername, clearUserInfo, avatarUrl } from '@/stores/userStore'
+import { getUserInfo, isLoggedIn, user, username as storeUsername, clearUserInfo, avatarUrl } from '@/stores/userStore'
 import { useRouter } from 'vue-router'
 import { onClickOutside } from '@vueuse/core'
 
 const router = useRouter()
 const userAvatar = avatarUrl
+const isAdmin = computed(() => user.value?.role === 'admin')
 const showDropdown = ref(false)
 const showMobileNav = ref(false)
 const dropdownRef = ref(null)

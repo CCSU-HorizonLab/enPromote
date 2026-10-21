@@ -64,6 +64,12 @@ const router = createRouter({
             component: () => import('../views/profile.vue'),
             meta: { requiresAuth: true }
         },
+        {
+            path: '/admin',
+            name: 'AdminDashboard',
+            component: () => import('../views/AdminDashboard.vue'),
+            meta: { requiresAuth: true, requiresAdmin: true }
+        },
 
         // 剧情模式路由
         {
@@ -233,7 +239,7 @@ router.beforeEach(async (to, from, next) => {
         }
 
         // 检查用户是否已登录
-        const { isLoggedIn, getUserInfo } = await import('@/stores/userStore');
+        const { isLoggedIn, user, getUserInfo } = await import('@/stores/userStore');
         if (!isLoggedIn.value) {
             // 如果用户未登录，尝试获取用户信息
             try {
@@ -249,6 +255,12 @@ router.beforeEach(async (to, from, next) => {
                 return;
             }
         }
+
+        if (to.meta.requiresAdmin && user.value?.role !== 'admin') {
+            next('/');
+            return;
+        }
+
         next();
     } else {
         next();
