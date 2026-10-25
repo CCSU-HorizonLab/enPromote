@@ -1,17 +1,23 @@
 <template>
-  <div class="check-in-page">
-    <header class="page-header">
-      <button class="back-button" @click="goBack">
-        <span class="icon">←</span>
-        <span class="text">返回</span>
-      </button>
-      <h1 class="page-title">每日签到</h1>
-      <div class="placeholder"></div>
-    </header>
+  <div class="checkin-page-view">
+    <div class="learn-page">
+      <!-- 顶部返回导航 -->
+      <nav class="page-top-nav">
+        <button class="nav-back-btn" type="button" @click="goBack">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+          <span>返回学习台</span>
+        </button>
 
-    <main class="page-content">
-      <CheckIn />
-    </main>
+        <span class="nav-title-pill">每日习惯 · 签到中心</span>
+      </nav>
+
+      <!-- 嵌入式签到面板 -->
+      <div class="checkin-container-wrap">
+        <CheckIn :embedded="true" @checked-in="onCheckedIn" />
+      </div>
+    </div>
   </div>
 </template>
 
@@ -21,49 +27,77 @@ import CheckIn from '@/components/CheckIn.vue';
 
 const router = useRouter();
 
-// 返回上一页
 const goBack = () => {
-  router.back();
+  if (window.history.length > 1) {
+    router.back();
+  } else {
+    router.push('/');
+  }
+};
+
+const onCheckedIn = () => {
+  // 可以在签到成功后触发一些全局事件或日志
 };
 </script>
 
 <style scoped>
-.check-in-page {
+.checkin-page-view {
   min-height: 100vh;
-  background-color: #f5f7fa;
+  background:
+    radial-gradient(circle at top left, rgba(240, 164, 58, 0.16), transparent 32rem),
+    linear-gradient(180deg, #fbf8ef 0%, var(--learn-bg, #f7f4ea) 100%);
+  padding-bottom: 40px;
 }
 
-.page-header {
+.page-top-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
-  background: white;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  margin-bottom: 24px;
+  padding: 0 4px;
 }
 
-.back-button {
-  display: flex;
+.nav-back-btn {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: none;
-  border: none;
-  color: #333;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--learn-surface-strong, #ffffff);
+  border: 1px solid rgba(36, 49, 47, 0.12);
+  color: var(--learn-ink, #24312f);
+  font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
-  font-size: 16px;
+  box-shadow: 0 4px 12px rgba(50, 59, 52, 0.05);
+  transition: all 0.2s ease;
 }
 
-.page-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
+.nav-back-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
-.placeholder {
-  width: 60px; /* 与返回按钮宽度相同，保持标题居中 */
+.nav-back-btn:hover {
+  background: var(--learn-surface, #fffdf7);
+  transform: translateX(-2px);
+  border-color: rgba(31, 138, 112, 0.3);
+  color: var(--learn-primary-dark, #11614f);
 }
 
-.page-content {
-  padding: 20px;
+.nav-title-pill {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--learn-primary-dark, #11614f);
+  background: rgba(31, 138, 112, 0.08);
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(31, 138, 112, 0.15);
+}
+
+.checkin-container-wrap {
+  display: flex;
+  justify-content: center;
+  margin: 0 auto;
 }
 </style>
