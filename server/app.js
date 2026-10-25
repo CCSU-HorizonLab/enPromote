@@ -20,6 +20,7 @@ const vocabularyLearningRouter = require('./router/vocabularyLearning');
 const flashcardStatsRouter = require('./router/flashcardStats');
 const commendWordsRouter = require('./router/commendWords');
 const logsRouter = require('./router/logs');
+const adminRouter = require('./router/admin');
 const aiRouter = require('./router/ai');
 const checkInRouter = require('./router/checkin');
 const reviewPlanRouter = require('./router/reviewPlan');
@@ -128,6 +129,8 @@ app.use('/api/oral', oralRouter);
 // 其余 API 统一要求有效登录状态
 app.use('/api', requireAuth);
 
+// 登录校验之后再挂载管理 API；adminRouter 内部还会再次检查管理员角色。
+app.use('/api/admin', adminRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/word', getwordRouter, wordRouter);
 app.use('/api/vocabulary', vocabularyRouter);
