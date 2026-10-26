@@ -126,6 +126,10 @@ app.get('/test-static', (req, res) => {
 // 口语评测接口保持公开访问
 app.use('/api/oral', oralRouter);
 
+// AVG 跑团新玩法独立测试接口 (公开用于快速测试联调)
+const avgTestRouter = require('./test-new-model/router');
+app.use('/api/avg-test', avgTestRouter);
+
 // 其余 API 统一要求有效登录状态
 app.use('/api', requireAuth);
 

@@ -1,0 +1,45 @@
+{
+  "scenario_coffee_01": {
+    "scenarioId": "scenario_coffee_01",
+    "title": "早高峰的破例特调",
+    "sceneVisual": {
+      "sceneName": "Corner Cafe (街角精品咖啡馆)",
+      "themeColor": "#e07a5f",
+      "ambience": "早高峰人声嘈杂，浓缩咖啡机滋滋作响，队尾排到了门外"
+    },
+    "npcId": "chloe",
+    "dramaticContext": {
+      "whyHere": "Chloe 正在给突发高烧的同事代早班，已经连续站立工作了 4 个小时，咖啡机蒸奶棒刚才还堵塞了一次。",
+      "currentMentalState": "烦躁度 85%，严重缺觉，手腕酸痛，只想迅速清空眼前的长队，准点换班去参加傍晚的独立乐队排练。",
+      "immediateGoal": "拒绝一切复杂的非标定制，快速出餐，谁耽误时间就怼谁。",
+      "hiddenSoftSpot": "虽然嘴碎厌烦，但骨子里是个精品咖啡极客。若有顾客能精准、得体、专业地描述风味与配方（而不是犹豫不决），会瞬间破防并产生专业认同感。"
+    },
+    "targetDc": 13,
+    "openingLine": "Next! Keep it snappy, the morning queue is out the door. What can I get started for you?",
+    "objectiveDescription": "说服濒临崩溃、不耐烦的 Chloe 在早高峰为你制作一份非标定制的低糖燕麦奶特调。",
+    "recommendedKeywords": [
+      { "word": "oat milk", "meaning": "燕麦奶" },
+      { "word": "extra shot", "meaning": "双份浓缩" },
+      { "word": "lactose intolerant", "meaning": "乳糖不耐受" },
+      { "word": "sugar-free syrup", "meaning": "无糖糖浆" }
+    ],
+    "climaxThresholdRound": 2,
+    "endings": {
+      "critical_success": {
+        "type": "critical_success",
+        "title": "【高光结局】极客的私房特调",
+        "storyText": "Chloe 愣了一下，收起了不耐烦的神色，嘴角微微扬起。她压低声音说：'很少有人能在早高峰这么利落地讲清楚配比。' 她特意拿出了自己私藏的单品埃塞豆，为你拉了一朵近乎完美的郁金香花。好感度大幅飙升！"
+      },
+      "success": {
+        "type": "success",
+        "title": "【达成目标】特调顺利到手",
+        "storyText": "Chloe 快速在触屏上点了两下，虽然嘴上嘀咕了一句：'行吧，算你点得利索。' 但她熟练地换上了燕麦奶，精准地压粉萃取。两分钟后，一杯香气扑鼻的热燕麦拿铁推到了你面前。"
+      },
+      "fail_forward": {
+        "type": "fail_forward",
+        "title": "【趣味支线】流水线的妥协",
+        "storyText": "早高峰容不得半点犹豫。Chloe 叹了口气，直接递给你一杯已经萃好的常规热美式：'高峰期不接受复杂定制！拿好这杯，算我请你半价——下次记得直接说 \"Iced oat latte to go\"，别在柜台前犹豫！' 虽然没喝到特调，但你收获了一句地道母语点单经验。"
+      }
+    }
+  }
+}
