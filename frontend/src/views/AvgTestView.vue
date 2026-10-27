@@ -3,7 +3,7 @@
     <!-- 顶部状态栏 -->
     <header class="top-nav">
       <div class="nav-brand">
-        <span class="badge-tag">RPG DND AVG</span>
+        <span class="badge-tag">RPG DND AVG · 双轨离散版</span>
         <h1>{{ scenarioData?.title || '正在加载剧本...' }}</h1>
       </div>
       <div class="nav-status" v-if="scenarioData">
@@ -12,7 +12,7 @@
           <span class="val">DC {{ scenarioData.targetDc }}</span>
         </div>
         <div class="status-pill round-pill">
-          <span class="label">轮次</span>
+          <span class="label">交流轮次</span>
           <span class="val">{{ currentRound }} 轮</span>
         </div>
         <button class="btn-ghost" @click="resetSession" :disabled="loading">
@@ -22,7 +22,7 @@
     </header>
 
     <main class="main-layout" v-if="scenarioData">
-      <!-- 左栏：NPC 与情境看板 -->
+      <!-- 左栏：NPC 与双轨明牌指示器 -->
       <aside class="npc-sidebar">
         <!-- 角色立绘与情绪卡 -->
         <div class="npc-card" :class="currentEmotion">
@@ -41,21 +41,92 @@
           </div>
         </div>
 
-        <!-- 动态好感心智槽 (Affinity EXP) -->
-        <div class="affinity-card">
+        <!-- 轨 1：Chloe 耐心槽 (Patience Hearts) -->
+        <div class="tracker-card patience-card" :class="{ 'crisis-alert': dualTrack.patienceHearts === 0 }">
           <div class="card-header">
-            <span class="icon">💖</span>
-            <h3>Chloe 的认可与好感度</h3>
-            <span class="affinity-badge" :class="getAffinityTierClass(affinityExp)">
-              加成 {{ formatMod(accumulatedMods.affinityMod) }}
+            <span class="icon">⏳</span>
+            <h3>Chloe 的耐心 (Patience)</h3>
+            <span class="heart-status-tag" :class="dualTrack.patienceHearts > 0 ? 'safe' : 'danger'">
+              {{ dualTrack.patienceHearts > 0 ? '尚存耐心' : '已耗尽!' }}
             </span>
           </div>
-          <div class="affinity-bar-container">
-            <div class="affinity-bar-fill" :style="{ width: affinityExp + '%' }"></div>
+          <div class="hearts-row">
+            <span
+              v-for="i in 3"
+              :key="i"
+              class="heart-icon"
+              :class="{ broken: i > dualTrack.patienceHearts }"
+            >
+              {{ i <= dualTrack.patienceHearts ? '❤️' : '💔' }}
+            </span>
           </div>
-          <div class="affinity-meta">
-            <span>认可经验: <strong>{{ affinityExp }} / 100 EXP</strong></span>
-            <small>{{ getAffinityTierName(affinityExp) }}</small>
+          <div class="tracker-sub">
+            <span v-if="dualTrack.patienceHearts > 0">
+              心碎扣减：<strong>-{{ dualTrack.brokenHearts }} 点修正</strong> (粗鲁或超时会碎心)
+            </span>
+            <span v-else class="text-danger">
+              ⚠️ 耐心已耗尽！已触发社交危机，请立即决胜！
+            </span>
+          </div>
+        </div>
+
+        <!-- 轨 2：筹码与印章 (Tokens & Stamps) -->
+        <div class="tracker-card tokens-card">
+          <div class="card-header">
+            <span class="icon">🪙</span>
+            <h3>交涉筹码与词汇印章</h3>
+          </div>
+
+          <!-- 筹码槽 -->
+          <div class="token-slot-row">
+            <div class="slot-label">
+              <span>语言表现筹码</span>
+              <small>{{ dualTrack.persuasionTokens }} / 3 枚</small>
+            </div>
+            <div class="slots">
+              <span
+                v-for="i in 3"
+                :key="i"
+                class="coin-badge"
+                :class="{ active: i <= dualTrack.persuasionTokens }"
+              >
+                {{ i <= dualTrack.persuasionTokens ? '🪙' : '⚪' }}
+              </span>
+            </div>
+          </div>
+
+          <!-- 词汇印章槽 -->
+          <div class="token-slot-row">
+            <div class="slot-label">
+              <span>核心词汇印章</span>
+              <small>{{ dualTrack.keywordStampsCount }} / 3 枚</small>
+            </div>
+            <div class="slots">
+              <span
+                v-for="i in 3"
+                :key="i"
+                class="stamp-badge"
+                :class="{ active: i <= dualTrack.keywordStampsCount }"
+              >
+                {{ i <= dualTrack.keywordStampsCount ? '🎯' : '⚪' }}
+              </span>
+            </div>
+          </div>
+
+          <!-- 明牌修正汇总条 -->
+          <div class="total-calc-bar">
+            <div class="calc-formula">
+              <span>+{{ dualTrack.persuasionTokens }} (筹码)</span>
+              <span>+{{ dualTrack.keywordStampsCount }} (印章)</span>
+              <span>+{{ dualTrack.baseAffinity }} (熟客)</span>
+              <span class="text-sub">-{{ dualTrack.brokenHearts }} (心碎)</span>
+            </div>
+            <div class="calc-result">
+              <small>决胜总加成</small>
+              <strong :class="dualTrack.totalPendingMod >= 0 ? 'text-positive' : 'text-danger'">
+                {{ formatMod(dualTrack.totalPendingMod) }} 点
+              </strong>
+            </div>
           </div>
         </div>
 
@@ -76,42 +147,6 @@
           <div class="context-item">
             <span class="label">破防软肋:</span>
             <p class="soft-spot">{{ scenarioData.dramaticContext.hiddenSoftSpot }}</p>
-          </div>
-        </div>
-
-        <!-- 检定修正值实时蓄能板 -->
-        <div class="modifiers-card">
-          <div class="card-header">
-            <span class="icon">🎲</span>
-            <h3>语言修正蓄能 (Modifiers)</h3>
-          </div>
-          <div class="mods-grid">
-            <div class="mod-item">
-              <span class="mod-name">语气得体 (均值)</span>
-              <span class="mod-val" :class="getModClass(accumulatedMods.toneMod)">
-                {{ formatMod(accumulatedMods.toneMod) }}
-              </span>
-            </div>
-            <div class="mod-item">
-              <span class="mod-name">地道语法 (均值)</span>
-              <span class="mod-val" :class="getModClass(accumulatedMods.fluencyMod)">
-                {{ formatMod(accumulatedMods.fluencyMod) }}
-              </span>
-            </div>
-            <div class="mod-item">
-              <span class="mod-name">已解锁词汇</span>
-              <span class="mod-val" :class="getModClass(accumulatedMods.keywordMod)">
-                +{{ accumulatedMods.keywordMod }}
-              </span>
-            </div>
-            <div class="mod-item">
-              <span class="mod-name">好感加成</span>
-              <span class="mod-val positive">{{ formatMod(accumulatedMods.affinityMod) }}</span>
-            </div>
-          </div>
-          <div class="total-bar">
-            <span>当前决胜总加成：</span>
-            <strong>+{{ totalBonus }} 点</strong>
           </div>
         </div>
       </aside>
@@ -152,6 +187,10 @@
               <!-- 语言即时反馈 (针对用户输入) -->
               <div v-if="msg.evaluation" class="eval-card">
                 <div class="eval-chips">
+                  <!-- 获得的筹码或碎心标记 -->
+                  <span v-if="msg.tokenEarned" class="chip token-chip">🪙 +1 获得交涉筹码！</span>
+                  <span v-if="msg.heartBroken" class="chip heart-chip">💔 失去 1 颗耐心！</span>
+                  
                   <span class="chip" :class="getModClass(msg.evaluation.toneMod)">
                     语气 {{ formatMod(msg.evaluation.toneMod) }} ({{ msg.evaluation.toneReason }})
                   </span>
@@ -159,7 +198,7 @@
                     地道 {{ formatMod(msg.evaluation.fluencyMod) }}
                   </span>
                   <span v-if="msg.evaluation.keywordsHit?.length" class="chip hit-chip">
-                    🎯 命中: {{ msg.evaluation.keywordsHit.join(', ') }}
+                    🎯 盖下印章: {{ msg.evaluation.keywordsHit.join(', ') }}
                   </span>
                 </div>
                 <div v-if="msg.evaluation.polishTip" class="polish-tip">
@@ -205,7 +244,7 @@
 
         <!-- 快捷场景词汇支架 (未结算时展示) -->
         <div class="keywords-bar" v-if="!isCompleted">
-          <span class="kw-label">推荐核心表达（点击填入）：</span>
+          <span class="kw-label">推荐核心表达（命中可点亮印章）：</span>
           <div class="kw-chips">
             <button
               v-for="kw in scenarioData.recommendedKeywords"
@@ -216,6 +255,7 @@
             >
               <strong>{{ kw.word }}</strong>
               <small>{{ kw.meaning }}</small>
+              <span v-if="isKeywordHit(kw.word)" class="stamp-mark">🎯 已盖章</span>
             </button>
           </div>
         </div>
@@ -230,22 +270,23 @@
                 placeholder="用英语和 Chloe 交流（例如：Could I get an iced latte with oat milk, please?）..."
                 rows="2"
                 @keydown.enter.prevent="sendMessage"
-                :disabled="loading || isChecking"
+                :disabled="loading || isChecking || dualTrack.patienceHearts === 0"
               ></textarea>
               <button
                 class="btn-send"
                 @click="sendMessage"
-                :disabled="!userInput.trim() || loading || isChecking"
+                :disabled="!userInput.trim() || loading || isChecking || dualTrack.patienceHearts === 0"
               >
                 发送对白 ↵
               </button>
             </div>
 
             <!-- 决胜大检定触发栏 -->
-            <div class="climax-action-bar" :class="{ 'highlight-pulse': pacingInfo.phase === 'prime' }">
+            <div class="climax-action-bar" :class="{ 'highlight-pulse': pacingInfo.phase === 'prime', 'crisis-pulse': dualTrack.patienceHearts === 0 }">
               <div class="climax-info">
-                <span>当前轮次已积攒加成 <strong>+{{ totalBonus }} 点</strong></span>
-                <small v-if="pacingInfo.phase === 'prime'">🔥 黄金交涉窗口已开启！正是提出非标特调的最佳时机！</small>
+                <span>当前决胜总加成：<strong :class="dualTrack.totalPendingMod >= 0 ? 'text-positive' : 'text-danger'">{{ formatMod(dualTrack.totalPendingMod) }} 点</strong></span>
+                <small v-if="dualTrack.patienceHearts === 0">⚠️ 耐心已耗尽，请立即掷骰发起终局交涉！</small>
+                <small v-else-if="pacingInfo.phase === 'prime'">🔥 黄金交涉窗口！筹码已满，正是提出非标特调的最佳时机！</small>
                 <small v-else-if="pacingInfo.phase === 'urgent'">⚠️ 后面队伍在催促，请尽快发起决胜检定！</small>
                 <small v-else>已交流 {{ currentRound }} 轮，建议做好铺垫后发起决胜检定</small>
               </div>
@@ -292,9 +333,9 @@
           </div>
         </div>
 
-        <!-- 修正计算明细卡 -->
+        <!-- 修正计算明细卡 (全明牌离散整数计算) -->
         <div class="breakdown-card" v-if="!isRolling && checkResult">
-          <h3>检定修正构成计算</h3>
+          <h3>检定修正构成计算 (双轨离散明牌模型)</h3>
           <div class="calc-row">
             <div class="calc-col">
               <span class="sub">基础骰点</span>
@@ -302,17 +343,27 @@
             </div>
             <span class="op">+</span>
             <div class="calc-col">
-              <span class="sub">语言修正 (语气+地道+词汇)</span>
-              <strong>{{ checkResult.modifiers.totalLanguageMod }}</strong>
+              <span class="sub">筹码 (语言表现)</span>
+              <strong>+{{ checkResult.modifiers.persuasionTokens }}</strong>
             </div>
             <span class="op">+</span>
             <div class="calc-col">
-              <span class="sub">好感加成</span>
-              <strong>{{ checkResult.modifiers.affinityMod }}</strong>
+              <span class="sub">印章 (核心词汇)</span>
+              <strong>+{{ checkResult.modifiers.keywordStamps }}</strong>
+            </div>
+            <span class="op">+</span>
+            <div class="calc-col">
+              <span class="sub">熟客好感</span>
+              <strong>+{{ checkResult.modifiers.baseAffinity }}</strong>
+            </div>
+            <span class="op">-</span>
+            <div class="calc-col text-sub">
+              <span class="sub">碎心惩罚</span>
+              <strong>-{{ checkResult.modifiers.brokenHeartsPenalty }}</strong>
             </div>
             <span class="op">=</span>
             <div class="calc-col total-col">
-              <span class="sub">最终得分</span>
+              <span class="sub">最终总分</span>
               <strong :class="checkResult.isPassed ? 'text-pass' : 'text-fail'">
                 {{ checkResult.finalScore }}
               </strong>
@@ -360,26 +411,30 @@ const isChecking = ref(false);
 const isCompleted = ref(false); // 本关是否已结案落锁
 const chatViewportRef = ref<HTMLElement | null>(null);
 
-const affinityExp = ref(30);
+// 双轨离散状态
+const dualTrack = ref({
+  patienceHearts: 3,
+  brokenHearts: 0,
+  persuasionTokens: 0,
+  keywordStampsCount: 0,
+  stampsList: [] as string[],
+  baseAffinity: 1,
+  totalPendingMod: 1
+});
+
 const pacingInfo = ref({
   phase: 'warmup',
   label: '铺垫破冰期',
-  hint: '建议先表达对忙碌的理解，铺垫基础饮品需求。'
+  hint: '建议先表达对忙碌的理解，铺垫基础饮品需求，赚取筹码。'
 });
 
 const messages = ref<Array<{
   role: 'user' | 'assistant';
   content: string;
   evaluation?: any;
+  tokenEarned?: boolean;
+  heartBroken?: boolean;
 }>>([]);
-
-const accumulatedMods = ref({
-  toneMod: 0,
-  fluencyMod: 0,
-  keywordMod: 0,
-  affinityMod: 1,
-  keywordsHit: [] as string[]
-});
 
 // 骰子模态框状态
 const showDiceModal = ref(false);
@@ -387,15 +442,6 @@ const isRolling = ref(false);
 const displayedRoll = ref(20);
 const checkResult = ref<any>(null);
 const checkEnding = ref<any>(null);
-
-const totalBonus = computed(() => {
-  return (
-    accumulatedMods.value.toneMod +
-    accumulatedMods.value.fluencyMod +
-    accumulatedMods.value.keywordMod +
-    accumulatedMods.value.affinityMod
-  );
-});
 
 const emotionLabel = computed(() => {
   switch (currentEmotion.value) {
@@ -417,26 +463,12 @@ function getModClass(val: number) {
   return 'neutral';
 }
 
-function getAffinityTierName(exp: number) {
-  if (exp < 20) return '关系冷淡 (扣除修正)';
-  if (exp < 45) return '普通熟客 (+1 加成)';
-  if (exp < 75) return '专业认可 (+2 加成)';
-  return '极客专属羁绊 (+3 加成)';
-}
-
-function getAffinityTierClass(exp: number) {
-  if (exp < 20) return 'tier-cold';
-  if (exp < 45) return 'tier-normal';
-  if (exp < 75) return 'tier-friendly';
-  return 'tier-trusted';
-}
-
 function isKeywordHit(word: string) {
-  return accumulatedMods.value.keywordsHit.includes(word);
+  return dualTrack.value.stampsList.includes(word);
 }
 
 function insertKeyword(word: string) {
-  if (isCompleted.value) return;
+  if (isCompleted.value || dualTrack.value.patienceHearts === 0) return;
   if (!userInput.value.includes(word)) {
     userInput.value = userInput.value ? `${userInput.value} ${word}` : word;
   }
@@ -444,6 +476,7 @@ function insertKeyword(word: string) {
 
 function getOutcomeBadge(type: string) {
   if (type === 'critical_success') return '🌟 CRITICAL SUCCESS (大成功)';
+  if (type === 'reluctant_pass') return '🎲 DOG LUCK PASS (狗运涉险过关)';
   if (type === 'success') return '✅ SUCCESS (检定通过)';
   return '🔄 FAIL FORWARD (顺势推进)';
 }
@@ -464,9 +497,8 @@ async function loadInitData() {
     if (json.success) {
       scenarioData.value = json.data;
       currentRound.value = json.data.currentRound || 0;
-      affinityExp.value = json.data.affinityExp || 30;
       pacingInfo.value = json.data.pacing;
-      accumulatedMods.value = json.data.accumulatedModifiers;
+      dualTrack.value = json.data.dualTrack;
       isCompleted.value = json.data.status === 'completed';
       checkResult.value = json.data.checkResult;
       checkEnding.value = json.data.ending;
@@ -481,7 +513,7 @@ async function loadInitData() {
 // 发送用户对白
 async function sendMessage() {
   const text = userInput.value.trim();
-  if (!text || loading.value || isCompleted.value) return;
+  if (!text || loading.value || isCompleted.value || dualTrack.value.patienceHearts === 0) return;
 
   userInput.value = '';
   messages.value.push({ role: 'user', content: text });
@@ -499,14 +531,15 @@ async function sendMessage() {
     if (json.success && json.data) {
       currentEmotion.value = json.data.emotion || 'neutral';
       currentRound.value = json.data.currentRound;
-      affinityExp.value = json.data.affinityExp;
       pacingInfo.value = json.data.pacing;
-      accumulatedMods.value = json.data.accumulatedModifiers;
+      dualTrack.value = json.data.dualTrack;
 
-      // 附加对当前发言的评估
+      // 附加对当前发言的评估与筹码/碎心事件
       const lastUserMsg = messages.value[messages.value.length - 1];
       if (lastUserMsg) {
         lastUserMsg.evaluation = json.data.evaluation;
+        lastUserMsg.tokenEarned = json.data.eventTriggers?.tokenEarned;
+        lastUserMsg.heartBroken = json.data.eventTriggers?.heartBroken;
       }
 
       // 添加 NPC 回复
@@ -774,47 +807,125 @@ onMounted(() => {
   line-height: 1.4;
 }
 
-/* 好感心智槽卡片 */
-.affinity-card {
+/* 双轨指示器卡片 */
+.tracker-card {
   background: #1e293b;
   border-radius: 12px;
   border: 1px solid #334155;
   padding: 14px;
 }
-.affinity-badge {
+.patience-card.crisis-alert {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  animation: pulseGlow 1.5s infinite;
+}
+.heart-status-tag {
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   padding: 2px 8px;
   border-radius: 12px;
   margin-left: auto;
 }
-.tier-cold { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid #ef4444; }
-.tier-normal { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid #3b82f6; }
-.tier-friendly { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid #10b981; }
-.tier-trusted { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #f59e0b; }
+.heart-status-tag.safe { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+.heart-status-tag.danger { background: rgba(239, 68, 68, 0.2); color: #f87171; }
 
-.affinity-bar-container {
-  height: 8px;
-  background: #0f172a;
-  border-radius: 4px;
-  overflow: hidden;
-  margin: 10px 0 6px 0;
-  border: 1px solid #334155;
-}
-.affinity-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #3b82f6 0%, #10b981 70%, #f59e0b 100%);
-  transition: width 0.4s ease;
-}
-.affinity-meta {
+.hearts-row {
   display: flex;
-  justify-content: space-between;
+  gap: 12px;
+  justify-content: center;
+  font-size: 32px;
+  padding: 8px 0;
+}
+.heart-icon {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+  transition: transform 0.2s;
+}
+.heart-icon.broken {
+  opacity: 0.4;
+  filter: grayscale(1);
+}
+.tracker-sub {
   font-size: 11px;
   color: #94a3b8;
+  text-align: center;
+}
+.text-danger {
+  color: #f87171 !important;
+  font-weight: 700;
 }
 
-/* 戏剧动机卡与修正值卡 */
-.context-card, .modifiers-card {
+/* 筹码与印章卡片 */
+.token-slot-row {
+  background: #0f172a;
+  border: 1px solid #334155;
+  padding: 8px 12px;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.slot-label span {
+  font-size: 12px;
+  color: #cbd5e1;
+  display: block;
+}
+.slot-label small {
+  font-size: 10px;
+  color: #64748b;
+}
+.slots {
+  display: flex;
+  gap: 6px;
+  font-size: 20px;
+}
+.coin-badge, .stamp-badge {
+  opacity: 0.3;
+  transition: all 0.3s;
+}
+.coin-badge.active, .stamp-badge.active {
+  opacity: 1;
+  transform: scale(1.1);
+  filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.6));
+}
+
+/* 明牌总修正结算条 */
+.total-calc-bar {
+  margin-top: 10px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid #3b82f6;
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.calc-formula {
+  font-size: 11px;
+  color: #94a3b8;
+  display: flex;
+  gap: 6px;
+}
+.calc-formula .text-sub {
+  color: #f87171;
+}
+.calc-result {
+  text-align: right;
+}
+.calc-result small {
+  font-size: 10px;
+  color: #64748b;
+  display: block;
+}
+.calc-result strong {
+  font-size: 16px;
+}
+.text-positive {
+  color: #34d399;
+}
+
+/* 戏剧动机卡 */
+.context-card {
   background: #1e293b;
   border-radius: 12px;
   border: 1px solid #334155;
@@ -855,53 +966,6 @@ onMounted(() => {
 }
 .soft-spot {
   color: #38bdf8 !important;
-}
-
-.mods-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.mod-item {
-  background: #0f172a;
-  border: 1px solid #334155;
-  padding: 8px 10px;
-  border-radius: 8px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.mod-name {
-  font-size: 11px;
-  color: #94a3b8;
-}
-.mod-val {
-  font-size: 13px;
-  font-weight: 700;
-}
-.mod-val.positive {
-  color: #34d399;
-}
-.mod-val.negative {
-  color: #f87171;
-}
-.mod-val.neutral {
-  color: #94a3b8;
-}
-.total-bar {
-  margin-top: 12px;
-  background: rgba(59, 130, 246, 0.15);
-  border: 1px solid #3b82f6;
-  padding: 8px 12px;
-  border-radius: 8px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
-}
-.total-bar strong {
-  color: #60a5fa;
-  font-size: 15px;
 }
 
 /* 右侧舞台 */
@@ -962,6 +1026,12 @@ onMounted(() => {
   background: rgba(239, 68, 68, 0.15);
   border-color: #ef4444;
   color: #f87171;
+}
+.pacing-pill.crisis {
+  background: #ef4444;
+  color: #fff;
+  font-weight: 700;
+  animation: pulseGlow 0.8s infinite;
 }
 @keyframes pulseGlow {
   0% { opacity: 0.8; }
@@ -1034,6 +1104,16 @@ onMounted(() => {
   font-weight: 600;
   font-size: 11px;
 }
+.chip.token-chip {
+  background: #f59e0b;
+  color: #000;
+  font-weight: 800;
+}
+.chip.heart-chip {
+  background: #ef4444;
+  color: #fff;
+  font-weight: 800;
+}
 .chip.positive {
   background: #10b981;
   color: #fff;
@@ -1043,8 +1123,8 @@ onMounted(() => {
   color: #fff;
 }
 .chip.hit-chip {
-  background: #f59e0b;
-  color: #000;
+  background: #0ea5e9;
+  color: #fff;
 }
 .polish-tip {
   background: rgba(0, 0, 0, 0.2);
@@ -1079,6 +1159,10 @@ onMounted(() => {
 .settlement-stage-card.critical_success {
   border-color: #10b981;
   background: rgba(16, 185, 129, 0.05);
+}
+.settlement-stage-card.reluctant_pass {
+  border-color: #f97316;
+  background: rgba(249, 115, 22, 0.08);
 }
 .settlement-stage-card.success {
   border-color: #3b82f6;
@@ -1184,9 +1268,14 @@ onMounted(() => {
   background: #2563eb;
 }
 .kw-btn.hit {
-  border-color: #10b981;
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
+  border-color: #0ea5e9;
+  background: rgba(14, 165, 233, 0.15);
+  color: #38bdf8;
+}
+.stamp-mark {
+  font-size: 10px;
+  font-weight: 700;
+  color: #38bdf8;
 }
 
 /* 输入栏 */
@@ -1248,6 +1337,10 @@ onMounted(() => {
 .climax-action-bar.highlight-pulse {
   background: rgba(16, 185, 129, 0.15);
   border-color: #10b981;
+}
+.climax-action-bar.crisis-pulse {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #ef4444;
 }
 .climax-info span {
   font-size: 13px;
@@ -1314,7 +1407,7 @@ onMounted(() => {
   background: #1e293b;
   border: 1px solid #475569;
   border-radius: 16px;
-  max-width: 580px;
+  max-width: 600px;
   width: 100%;
   padding: 24px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
@@ -1393,11 +1486,11 @@ onMounted(() => {
   color: #64748b;
 }
 .calc-col strong {
-  font-size: 16px;
+  font-size: 15px;
   color: #f8fafc;
 }
 .calc-row .op {
-  font-size: 16px;
+  font-size: 14px;
   color: #64748b;
 }
 .total-col strong {
@@ -1420,6 +1513,10 @@ onMounted(() => {
   background: rgba(16, 185, 129, 0.1);
   border-color: #10b981;
 }
+.outcome-card.reluctant_pass {
+  background: rgba(249, 115, 22, 0.12);
+  border-color: #f97316;
+}
 .outcome-card.success {
   background: rgba(59, 130, 246, 0.1);
   border-color: #3b82f6;
@@ -1437,6 +1534,7 @@ onMounted(() => {
   margin-bottom: 6px;
 }
 .critical_success .outcome-badge { background: #10b981; color: #fff; }
+.reluctant_pass .outcome-badge { background: #f97316; color: #fff; }
 .success .outcome-badge { background: #3b82f6; color: #fff; }
 .fail_forward .outcome-badge { background: #f59e0b; color: #000; }
 

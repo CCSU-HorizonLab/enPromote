@@ -119,18 +119,20 @@ Player made their final climax statement to NPC ${npc.name}.
 A DND ability check was executed.
 
 [Climax Check Result]:
-- Outcome: ${checkResult.outcome} (critical_success, success, or fail_forward)
+- Outcome: ${checkResult.outcome} (critical_success, reluctant_pass, success, or fail_forward)
 - Total Score: ${checkResult.finalScore} vs Target DC: ${checkResult.targetDc}
-- Modifiers Breakdown: Tone ${checkResult.modifiers.toneMod}, Fluency ${checkResult.modifiers.fluencyMod}, Keywords ${checkResult.modifiers.keywordMod}, Affinity ${checkResult.modifiers.affinityMod}
+- Broken Hearts (Patience lost): ${checkResult.modifiers.brokenHeartsPenalty || 0} / 3
+- Persuasion Tokens Earned: ${checkResult.modifiers.persuasionTokens || 0} / 3
 
 [Preset Ending Concept]:
 ${JSON.stringify(scenario.endings[checkResult.outcome] || scenario.endings.success, null, 2)}
 
 [Instructions]:
-Generate NPC ${npc.name}'s final in-character reaction line (1-2 sentences in English) reflecting the outcome:
-- If critical_success: thoroughly impressed, admits player is exceptional.
-- If success: agrees to the request, snappy but satisfied.
-- If fail_forward: cannot grant the special request due to rush/rules, but offers a compromise with a humorous lesson.
+Generate NPC ${npc.name}'s final in-character reaction line (1-2 sentences in English) reflecting the outcome and conversation context:
+- If critical_success (only possible when patience hearts >= 2): genuinely impressed by true coffee expertise and crisp delivery.
+- If reluctant_pass (dog luck pass: patience was drained >= 2 hearts or 0 hearts): Chloe is visibly annoyed and exasperated by player's previous stalling/hesitation, but because the queue behind is insane and player rolled lucky, she begrudgingly slams down the drink to get rid of them ("Fine! Take your oat latte and please go, the morning rush is killing me!"). ABSOLUTELY DO NOT PRAISE the player!
+- If success (normal): briskly and efficiently accepts the order.
+- If fail_forward: refuses custom order due to rush, gives regular black coffee instead with a snappy lesson.
 Also provide a concise summary for the learning report.
 `;
 
