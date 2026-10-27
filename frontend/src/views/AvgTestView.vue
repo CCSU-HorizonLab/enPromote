@@ -3,7 +3,7 @@
     <!-- 顶部状态栏 -->
     <header class="top-nav">
       <div class="nav-brand">
-        <span class="badge-tag">RPG DND AVG 实验版</span>
+        <span class="badge-tag">RPG DND AVG</span>
         <h1>{{ scenarioData?.title || '正在加载剧本...' }}</h1>
       </div>
       <div class="nav-status" v-if="scenarioData">
@@ -12,11 +12,11 @@
           <span class="val">DC {{ scenarioData.targetDc }}</span>
         </div>
         <div class="status-pill round-pill">
-          <span class="label">当前轮次</span>
+          <span class="label">轮次</span>
           <span class="val">{{ currentRound }} 轮</span>
         </div>
         <button class="btn-ghost" @click="resetSession" :disabled="loading">
-          🔄 重置会话
+          🔄 重置对局
         </button>
       </div>
     </header>
@@ -38,6 +38,24 @@
             <h2>{{ scenarioData.npc.name }}</h2>
             <span class="npc-title">{{ scenarioData.npc.title }}</span>
             <p class="npc-persona">{{ scenarioData.npc.persona }}</p>
+          </div>
+        </div>
+
+        <!-- 动态好感心智槽 (Affinity EXP) -->
+        <div class="affinity-card">
+          <div class="card-header">
+            <span class="icon">💖</span>
+            <h3>Chloe 的认可与好感度</h3>
+            <span class="affinity-badge" :class="getAffinityTierClass(affinityExp)">
+              加成 {{ formatMod(accumulatedMods.affinityMod) }}
+            </span>
+          </div>
+          <div class="affinity-bar-container">
+            <div class="affinity-bar-fill" :style="{ width: affinityExp + '%' }"></div>
+          </div>
+          <div class="affinity-meta">
+            <span>认可经验: <strong>{{ affinityExp }} / 100 EXP</strong></span>
+            <small>{{ getAffinityTierName(affinityExp) }}</small>
           </div>
         </div>
 
@@ -69,30 +87,30 @@
           </div>
           <div class="mods-grid">
             <div class="mod-item">
-              <span class="mod-name">语气得体</span>
+              <span class="mod-name">语气得体 (均值)</span>
               <span class="mod-val" :class="getModClass(accumulatedMods.toneMod)">
                 {{ formatMod(accumulatedMods.toneMod) }}
               </span>
             </div>
             <div class="mod-item">
-              <span class="mod-name">地道语法</span>
+              <span class="mod-name">地道语法 (均值)</span>
               <span class="mod-val" :class="getModClass(accumulatedMods.fluencyMod)">
                 {{ formatMod(accumulatedMods.fluencyMod) }}
               </span>
             </div>
             <div class="mod-item">
-              <span class="mod-name">关键词命中</span>
+              <span class="mod-name">已解锁词汇</span>
               <span class="mod-val" :class="getModClass(accumulatedMods.keywordMod)">
-                {{ formatMod(accumulatedMods.keywordMod) }}
+                +{{ accumulatedMods.keywordMod }}
               </span>
             </div>
             <div class="mod-item">
-              <span class="mod-name">好感羁绊</span>
-              <span class="mod-val positive">+1</span>
+              <span class="mod-name">好感加成</span>
+              <span class="mod-val positive">{{ formatMod(accumulatedMods.affinityMod) }}</span>
             </div>
           </div>
           <div class="total-bar">
-            <span>当前检定总加成：</span>
+            <span>当前决胜总加成：</span>
             <strong>+{{ totalBonus }} 点</strong>
           </div>
         </div>
@@ -100,10 +118,14 @@
 
       <!-- 右栏：对话推进舞台与行动区 -->
       <section class="stage-section">
-        <!-- 关卡通关目标条 -->
+        <!-- 关卡通关目标条与节奏提示 -->
         <div class="objective-banner">
           <div class="target-flag">🎯 关卡目标</div>
           <p>{{ scenarioData.objectiveDescription }}</p>
+          <div class="pacing-pill" :class="pacingInfo.phase" v-if="!isCompleted">
+            <span>{{ pacingInfo.label }}</span>
+            <small>{{ pacingInfo.hint }}</small>
+          </div>
         </div>
 
         <!-- 对话历史回放区 -->
@@ -131,7 +153,7 @@
               <div v-if="msg.evaluation" class="eval-card">
                 <div class="eval-chips">
                   <span class="chip" :class="getModClass(msg.evaluation.toneMod)">
-                    语气 {{ formatMod(msg.evaluation.toneMod) }}
+                    语气 {{ formatMod(msg.evaluation.toneMod) }} ({{ msg.evaluation.toneReason }})
                   </span>
                   <span class="chip" :class="getModClass(msg.evaluation.fluencyMod)">
                     地道 {{ formatMod(msg.evaluation.fluencyMod) }}
@@ -141,7 +163,7 @@
                   </span>
                 </div>
                 <div v-if="msg.evaluation.polishTip" class="polish-tip">
-                  <span class="polish-kicker">💡 地道说法推荐：</span>
+                  <span class="polish-kicker">💡 地道说法润色：</span>
                   <strong>"{{ msg.evaluation.polishTip.nativeSentence }}"</strong>
                   <p>{{ msg.evaluation.polishTip.explanation }}</p>
                 </div>
@@ -156,10 +178,33 @@
               <span class="thinking-text">{{ scenarioData.npc.name }} 正在打量你...</span>
             </div>
           </div>
+
+          <!-- 决胜结案归档卡片 (检定完成后直接在对话底部封板，不再允许发送新对白) -->
+          <div v-if="isCompleted && checkEnding" class="settlement-stage-card" :class="checkEnding.type">
+            <div class="settlement-header">
+              <span class="settlement-kicker">🎬 剧本单集交涉已落幕</span>
+              <h3>{{ checkEnding.title }}</h3>
+            </div>
+            <p class="settlement-story">{{ checkEnding.storyText }}</p>
+
+            <div class="settlement-quote">
+              <span class="speaker-tag">{{ scenarioData.npc.name }} 的最终反应：</span>
+              <p>"{{ checkEnding.npcFinalReply }}"</p>
+            </div>
+
+            <div class="settlement-takeaway">
+              <span class="takeaway-title">📋 本局语言学情复盘</span>
+              <p>{{ checkEnding.takeawayTip }}</p>
+            </div>
+
+            <div class="settlement-actions">
+              <button class="btn-primary" @click="resetSession">🔄 再次挑战本场景</button>
+            </div>
+          </div>
         </div>
 
-        <!-- 快捷场景词汇支架 -->
-        <div class="keywords-bar">
+        <!-- 快捷场景词汇支架 (未结算时展示) -->
+        <div class="keywords-bar" v-if="!isCompleted">
           <span class="kw-label">推荐核心表达（点击填入）：</span>
           <div class="kw-chips">
             <button
@@ -177,37 +222,54 @@
 
         <!-- 输入交互与行动栏 -->
         <div class="input-panel">
-          <div class="input-row">
-            <textarea
-              v-model="userInput"
-              placeholder="用英语和 Chloe 交流（例如：Could I get an iced latte with oat milk, please?）..."
-              rows="2"
-              @keydown.enter.prevent="sendMessage"
-              :disabled="loading || isChecking"
-            ></textarea>
-            <button
-              class="btn-send"
-              @click="sendMessage"
-              :disabled="!userInput.trim() || loading || isChecking"
-            >
-              发送对白 ↵
-            </button>
-          </div>
-
-          <!-- 决胜大检定触发栏 -->
-          <div class="climax-action-bar">
-            <div class="climax-info">
-              <span>已交流 {{ currentRound }} 轮，当前交涉总加成 <strong>+{{ totalBonus }}</strong></span>
-              <small>当做好了铺垫，点击发起最终交涉掷骰检定！</small>
+          <!-- 未结算状态：正常输入与发起检定 -->
+          <template v-if="!isCompleted">
+            <div class="input-row">
+              <textarea
+                v-model="userInput"
+                placeholder="用英语和 Chloe 交流（例如：Could I get an iced latte with oat milk, please?）..."
+                rows="2"
+                @keydown.enter.prevent="sendMessage"
+                :disabled="loading || isChecking"
+              ></textarea>
+              <button
+                class="btn-send"
+                @click="sendMessage"
+                :disabled="!userInput.trim() || loading || isChecking"
+              >
+                发送对白 ↵
+              </button>
             </div>
-            <button
-              class="btn-climax"
-              @click="triggerClimaxCheck"
-              :disabled="loading || isChecking"
-            >
-              🎲 发起决胜检定 (Roll D20)
-            </button>
-          </div>
+
+            <!-- 决胜大检定触发栏 -->
+            <div class="climax-action-bar" :class="{ 'highlight-pulse': pacingInfo.phase === 'prime' }">
+              <div class="climax-info">
+                <span>当前轮次已积攒加成 <strong>+{{ totalBonus }} 点</strong></span>
+                <small v-if="pacingInfo.phase === 'prime'">🔥 黄金交涉窗口已开启！正是提出非标特调的最佳时机！</small>
+                <small v-else-if="pacingInfo.phase === 'urgent'">⚠️ 后面队伍在催促，请尽快发起决胜检定！</small>
+                <small v-else>已交流 {{ currentRound }} 轮，建议做好铺垫后发起决胜检定</small>
+              </div>
+              <button
+                class="btn-climax"
+                @click="triggerClimaxCheck"
+                :disabled="loading || isChecking"
+              >
+                🎲 发起决胜检定 (Roll D20)
+              </button>
+            </div>
+          </template>
+
+          <!-- 已结算状态：锁定输入框，提示交涉已结束，彻底杜绝浪费算力 -->
+          <template v-else>
+            <div class="completed-lock-panel">
+              <span class="lock-icon">🔒</span>
+              <div class="lock-text">
+                <strong>本关交涉已完成，结局已达成！</strong>
+                <p>已生成完整学情复盘，对话已归档。如需尝试其他交涉口吻，请点击“重新挑战”。</p>
+              </div>
+              <button class="btn-primary" @click="resetSession">🔄 重新挑战</button>
+            </div>
+          </template>
         </div>
       </section>
     </main>
@@ -278,7 +340,7 @@
         </div>
 
         <div class="modal-footer" v-if="!isRolling">
-          <button class="btn-primary" @click="closeDiceModal">继续对话</button>
+          <button class="btn-primary" @click="finishAndCloseModal">查看全剧复盘</button>
           <button class="btn-ghost" @click="resetSession">重新挑战本关</button>
         </div>
       </div>
@@ -295,7 +357,15 @@ const currentEmotion = ref('neutral');
 const userInput = ref('');
 const loading = ref(false);
 const isChecking = ref(false);
+const isCompleted = ref(false); // 本关是否已结案落锁
 const chatViewportRef = ref<HTMLElement | null>(null);
+
+const affinityExp = ref(30);
+const pacingInfo = ref({
+  phase: 'warmup',
+  label: '铺垫破冰期',
+  hint: '建议先表达对忙碌的理解，铺垫基础饮品需求。'
+});
 
 const messages = ref<Array<{
   role: 'user' | 'assistant';
@@ -347,11 +417,26 @@ function getModClass(val: number) {
   return 'neutral';
 }
 
+function getAffinityTierName(exp: number) {
+  if (exp < 20) return '关系冷淡 (扣除修正)';
+  if (exp < 45) return '普通熟客 (+1 加成)';
+  if (exp < 75) return '专业认可 (+2 加成)';
+  return '极客专属羁绊 (+3 加成)';
+}
+
+function getAffinityTierClass(exp: number) {
+  if (exp < 20) return 'tier-cold';
+  if (exp < 45) return 'tier-normal';
+  if (exp < 75) return 'tier-friendly';
+  return 'tier-trusted';
+}
+
 function isKeywordHit(word: string) {
   return accumulatedMods.value.keywordsHit.includes(word);
 }
 
 function insertKeyword(word: string) {
+  if (isCompleted.value) return;
   if (!userInput.value.includes(word)) {
     userInput.value = userInput.value ? `${userInput.value} ${word}` : word;
   }
@@ -379,7 +464,12 @@ async function loadInitData() {
     if (json.success) {
       scenarioData.value = json.data;
       currentRound.value = json.data.currentRound || 0;
+      affinityExp.value = json.data.affinityExp || 30;
+      pacingInfo.value = json.data.pacing;
       accumulatedMods.value = json.data.accumulatedModifiers;
+      isCompleted.value = json.data.status === 'completed';
+      checkResult.value = json.data.checkResult;
+      checkEnding.value = json.data.ending;
     }
   } catch (err) {
     console.error('加载剧本失败:', err);
@@ -391,7 +481,7 @@ async function loadInitData() {
 // 发送用户对白
 async function sendMessage() {
   const text = userInput.value.trim();
-  if (!text || loading.value) return;
+  if (!text || loading.value || isCompleted.value) return;
 
   userInput.value = '';
   messages.value.push({ role: 'user', content: text });
@@ -409,6 +499,8 @@ async function sendMessage() {
     if (json.success && json.data) {
       currentEmotion.value = json.data.emotion || 'neutral';
       currentRound.value = json.data.currentRound;
+      affinityExp.value = json.data.affinityExp;
+      pacingInfo.value = json.data.pacing;
       accumulatedMods.value = json.data.accumulatedModifiers;
 
       // 附加对当前发言的评估
@@ -422,6 +514,8 @@ async function sendMessage() {
         role: 'assistant',
         content: json.data.npcReply
       });
+    } else if (json.isCompleted) {
+      isCompleted.value = true;
     }
   } catch (err) {
     console.error('对白请求失败:', err);
@@ -433,6 +527,8 @@ async function sendMessage() {
 
 // 发起关键交涉检定
 async function triggerClimaxCheck() {
+  if (isCompleted.value) return;
+
   showDiceModal.value = true;
   isRolling.value = true;
   checkResult.value = null;
@@ -459,6 +555,7 @@ async function triggerClimaxCheck() {
         checkResult.value = json.data.checkResult;
         checkEnding.value = json.data.ending;
         displayedRoll.value = json.data.checkResult.baseRoll;
+        isCompleted.value = true; // 关键：标记结案落锁
         if (json.data.ending.npcFinalEmotion) {
           currentEmotion.value = json.data.ending.npcFinalEmotion;
         }
@@ -472,8 +569,10 @@ async function triggerClimaxCheck() {
   }
 }
 
-function closeDiceModal() {
+// 结束弹窗并停留在复盘卡界面
+function finishAndCloseModal() {
   showDiceModal.value = false;
+  scrollToBottom();
 }
 
 // 重置会话
@@ -484,6 +583,9 @@ async function resetSession() {
     messages.value = [];
     currentEmotion.value = 'neutral';
     showDiceModal.value = false;
+    isCompleted.value = false;
+    checkResult.value = null;
+    checkEnding.value = null;
     await loadInitData();
   } catch (err) {
     console.error('重置失败:', err);
@@ -672,7 +774,46 @@ onMounted(() => {
   line-height: 1.4;
 }
 
-/* 戏剧动机卡 */
+/* 好感心智槽卡片 */
+.affinity-card {
+  background: #1e293b;
+  border-radius: 12px;
+  border: 1px solid #334155;
+  padding: 14px;
+}
+.affinity-badge {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 12px;
+  margin-left: auto;
+}
+.tier-cold { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid #ef4444; }
+.tier-normal { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid #3b82f6; }
+.tier-friendly { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid #10b981; }
+.tier-trusted { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #f59e0b; }
+
+.affinity-bar-container {
+  height: 8px;
+  background: #0f172a;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 10px 0 6px 0;
+  border: 1px solid #334155;
+}
+.affinity-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6 0%, #10b981 70%, #f59e0b 100%);
+  transition: width 0.4s ease;
+}
+.affinity-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+/* 戏剧动机卡与修正值卡 */
 .context-card, .modifiers-card {
   background: #1e293b;
   border-radius: 12px;
@@ -716,7 +857,6 @@ onMounted(() => {
   color: #38bdf8 !important;
 }
 
-/* 修正值卡片 */
 .mods-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -732,7 +872,7 @@ onMounted(() => {
   align-items: center;
 }
 .mod-name {
-  font-size: 12px;
+  font-size: 11px;
   color: #94a3b8;
 }
 .mod-val {
@@ -781,6 +921,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 .target-flag {
   background: #f59e0b;
@@ -795,6 +936,37 @@ onMounted(() => {
   margin: 0;
   font-size: 13px;
   color: #e2e8f0;
+  flex: 1;
+}
+.pacing-pill {
+  padding: 4px 10px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  border: 1px solid transparent;
+}
+.pacing-pill.warmup {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: #3b82f6;
+  color: #60a5fa;
+}
+.pacing-pill.prime {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: #10b981;
+  color: #34d399;
+  animation: pulseGlow 1.5s infinite;
+}
+.pacing-pill.urgent {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #ef4444;
+  color: #f87171;
+}
+@keyframes pulseGlow {
+  0% { opacity: 0.8; }
+  50% { opacity: 1; filter: brightness(1.2); }
+  100% { opacity: 0.8; }
 }
 
 /* 对话流 */
@@ -896,6 +1068,85 @@ onMounted(() => {
   font-size: 11px;
 }
 
+/* 结算归档卡片 */
+.settlement-stage-card {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 12px;
+}
+.settlement-stage-card.critical_success {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.05);
+}
+.settlement-stage-card.success {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.05);
+}
+.settlement-stage-card.fail_forward {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.05);
+}
+.settlement-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.settlement-header h3 {
+  margin: 4px 0 10px 0;
+  font-size: 18px;
+  color: #f8fafc;
+}
+.settlement-story {
+  font-size: 13px;
+  color: #cbd5e1;
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+.settlement-quote {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 14px;
+  border-left: 3px solid #f59e0b;
+}
+.speaker-tag {
+  font-size: 11px;
+  color: #94a3b8;
+  display: block;
+}
+.settlement-quote p {
+  margin: 2px 0 0 0;
+  font-size: 13px;
+  color: #fbbf24;
+  font-style: italic;
+}
+.settlement-takeaway {
+  background: rgba(59, 130, 246, 0.1);
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+.takeaway-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #60a5fa;
+  display: block;
+}
+.settlement-takeaway p {
+  margin: 4px 0 0 0;
+  font-size: 12px;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+.settlement-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 /* 关键词支架 */
 .keywords-bar {
   background: #131d2e;
@@ -994,6 +1245,10 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
 }
+.climax-action-bar.highlight-pulse {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: #10b981;
+}
 .climax-info span {
   font-size: 13px;
   color: #fbbf24;
@@ -1017,6 +1272,31 @@ onMounted(() => {
 .btn-climax:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(245, 158, 11, 0.6);
+}
+
+/* 结案锁定面板 */
+.completed-lock-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #1e293b;
+  border: 1px solid #475569;
+  padding: 12px 16px;
+  border-radius: 8px;
+}
+.lock-icon {
+  font-size: 24px;
+  margin-right: 12px;
+}
+.lock-text strong {
+  color: #f8fafc;
+  font-size: 14px;
+  display: block;
+}
+.lock-text p {
+  margin: 2px 0 0 0;
+  font-size: 12px;
+  color: #94a3b8;
 }
 
 /* 弹窗遮罩 */
@@ -1050,7 +1330,6 @@ onMounted(() => {
   color: #94a3b8;
 }
 
-/* 骰子动态 */
 .dice-arena {
   display: flex;
   flex-direction: column;
@@ -1086,7 +1365,6 @@ onMounted(() => {
   font-weight: 600;
 }
 
-/* 修正计算明细 */
 .breakdown-card {
   background: #0f172a;
   border: 1px solid #334155;
@@ -1132,7 +1410,6 @@ onMounted(() => {
   color: #f87171;
 }
 
-/* 结局卡片 */
 .outcome-card {
   border-radius: 10px;
   padding: 16px;

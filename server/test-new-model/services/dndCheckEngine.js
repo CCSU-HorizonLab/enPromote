@@ -6,6 +6,7 @@
  * 掷骰子 (默认 D20，或支持传入指定点数用于测试)
  * @param {number} [overrideRoll] - 测试用的指定点数
  * @returns {number} 1~20 随机整数
+ * 
  */
 function rollD20(overrideRoll) {
   if (typeof overrideRoll === 'number' && overrideRoll >= 1 && overrideRoll <= 20) {
