@@ -129,7 +129,7 @@ app.use('/api/oral', oralRouter);
 // 其余 API 统一要求有效登录状态
 app.use('/api', requireAuth);
 
-// 登录校验之后再挂载管理 API；adminRouter 内部还会再次检查管理员角色。
+// 先统一检查登录，再由管理路由按具体角色进行二次鉴权。
 app.use('/api/admin', adminRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/word', getwordRouter, wordRouter);
@@ -137,6 +137,8 @@ app.use('/api/vocabulary', vocabularyRouter);
 app.use('/api/vocabulary-learning', vocabularyLearningRouter);
 app.use('/api/flashcard', flashcardStatsRouter);
 app.use('/api/commendWords', commendWordsRouter);
+// /api/logs 是前端后台页面使用的地址；保留 /logs 兼容已有调用。
+app.use('/api/logs', logsRouter);
 app.use('/logs', logsRouter);
 app.use('/api/aiApi', aiRouter);
 app.use('/api/checkin', checkInRouter);

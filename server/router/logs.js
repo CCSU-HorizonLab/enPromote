@@ -2,11 +2,12 @@ const express = require('express');
 const router = express.Router();
 const LogViewer = require('../utils/logViewer');
 const { logger, logUserAction } = require('../utils/logger');
-const { requireAdmin } = require('../middleware/auth');
+const { requireAdmin, requireAdminOrManager } = require('../middleware/auth');
 
 const logViewer = new LogViewer();
 
-router.use(requireAdmin);
+// 查询日志属于只读操作，管理员和运营人员都可以使用。
+router.use(requireAdminOrManager);
 
 // 获取错误日志
 router.get('/errors', (req, res) => {
@@ -170,7 +171,8 @@ router.get('/level/:level', (req, res) => {
 });
 
 // 清理旧日志
-router.post('/clean', (req, res) => {
+// 清理日志会影响服务器数据，只允许 admin 执行。
+router.post('/clean', requireAdmin, (req, res) => {
     try {
         const { daysToKeep = 30 } = req.body;
         logViewer.cleanOldLogs(daysToKeep);

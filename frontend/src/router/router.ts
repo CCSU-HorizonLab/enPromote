@@ -68,7 +68,14 @@ const router = createRouter({
             path: '/admin',
             name: 'AdminDashboard',
             component: () => import('../views/AdminDashboard.vue'),
-            meta: { requiresAuth: true, requiresAdmin: true }
+            // 需要先登录，再检查角色是否为 admin 或 manager。
+            meta: { requiresAuth: true, requiresManagementAccess: true }
+        },
+        {
+            path: '/admin/logs',
+            name: 'AdminLogs',
+            component: () => import('../views/AdminLogs.vue'),
+            meta: { requiresAuth: true, requiresManagementAccess: true }
         },
 
         // 剧情模式路由
@@ -256,7 +263,8 @@ router.beforeEach(async (to, from, next) => {
             }
         }
 
-        if (to.meta.requiresAdmin && user.value?.role !== 'admin') {
+        // 路由守卫改善页面访问体验；真正的权限仍由后端接口再次校验。
+        if (to.meta.requiresManagementAccess && !['admin', 'manager'].includes(user.value?.role || '')) {
             next('/');
             return;
         }

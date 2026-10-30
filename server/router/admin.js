@@ -1,7 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const User = require('../modules/User');
-const { requireAdmin } = require('../middleware/auth');
+const { requireAdmin, requireAdminOrManager } = require('../middleware/auth');
 const { logger, logApiError, logUserAction } = require('../utils/logger');
 
 const router = express.Router();
@@ -9,8 +9,8 @@ const router = express.Router();
 const listFields = 'username email phone role status avatar isVerified createdAt createTime totalWords currentChapter cet4.todayStudiedWords cet4.streakDays cet4.learnedWords';
 const detailFields = `${listFields} updatedAt chapters`;
 
-// 路由级鉴权覆盖本文件所有接口；前端隐藏入口不能代替服务端权限检查。
-router.use(requireAdmin);
+// 用户查看接口允许 admin 和 manager；具体写操作再单独加更严格的权限。
+router.use(requireAdminOrManager);
 
 router.get('/users', async (req, res) => {
     try {
@@ -84,7 +84,8 @@ router.get('/users/:userId', async (req, res) => {
     }
 });
 
-router.patch('/users/:userId/status', async (req, res) => {
+// 启用/禁用会修改账号，因此额外要求 admin，manager 只能查看。
+router.patch('/users/:userId/status', requireAdmin, async (req, res) => {
     try {
         const { status } = req.body;
         if (!mongoose.isValidObjectId(req.params.userId)) {

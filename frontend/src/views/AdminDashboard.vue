@@ -4,18 +4,25 @@
       <div>
         <p class="eyebrow">WORDWISE / ADMINISTRATION</p>
         <h1>用户管理</h1>
-        <p class="intro">查询账号、查看学习概况，并管理普通用户的访问状态。</p>
+        <p class="intro">
+          {{ user?.role === 'manager' ? '只读查看平台账号和学习概况。' : '查询账号、查看学习概况，并管理普通用户的访问状态。' }}
+        </p>
       </div>
-      <router-link class="back-link" to="/">返回学习平台</router-link>
+      <div class="heading-actions">
+        <router-link class="back-link" to="/admin/logs">查看日志</router-link>
+        <router-link class="back-link" to="/">返回学习平台</router-link>
+      </div>
     </section>
 
-    <section class="access-panel" aria-label="当前管理员">
+    <section class="access-panel" aria-label="当前后台用户">
       <span class="access-mark" aria-hidden="true">A</span>
       <div>
-        <p class="panel-label">当前管理员</p>
+        <p class="panel-label">{{ user?.role === 'manager' ? '当前运营人员' : '当前管理员' }}</p>
         <strong>{{ username }}</strong>
       </div>
-      <span class="access-status">管理员权限已验证</span>
+      <span class="access-status">
+        {{ user?.role === 'manager' ? '只读权限已验证' : '管理员权限已验证' }}
+      </span>
     </section>
 
     <!-- 用户目录集中展示检索、分页和账号管理入口。 -->
@@ -75,8 +82,9 @@
               <td>{{ formatDate(account.createdAt || account.createTime) }}</td>
               <td class="actions-cell">
                 <button class="text-button" type="button" @click="openDetails(account._id)">详情</button>
+                <!-- manager 为只读角色，所以只有 admin 会看到启用/禁用按钮。 -->
                 <button
-                  v-if="account.role === 'user' && account._id !== currentUserId"
+                  v-if="user?.role === 'admin' && account.role === 'user' && account._id !== currentUserId"
                   class="text-button"
                   :class="account.status === 'disabled' ? 'enable-action' : 'disable-action'"
                   type="button"
@@ -85,7 +93,7 @@
                 >
                   {{ pendingUserId === account._id ? '处理中…' : account.status === 'disabled' ? '启用' : '禁用' }}
                 </button>
-                <span v-else class="protected-label">受保护</span>
+                <span v-else class="protected-label">{{ user?.role === 'manager' ? '只读' : '受保护' }}</span>
               </td>
             </tr>
           </tbody>
@@ -146,10 +154,13 @@ import type { AdminUser, AdminUserStatus } from '@/api/admin'
 import { user } from '@/stores/userStore'
 
 const pageSize = 20
+// 当前后台账号的显示信息和 ID；currentUserId 用于避免在列表中操作自己。
 const username = user.value?.username || '管理员'
 const currentUserId = user.value?._id
+// searchDraft 是输入框内容；search 是实际提交给接口的关键词。
 const searchDraft = ref('')
 const search = ref('')
+// 页面状态：列表、请求状态、错误信息和详情弹窗数据。
 const users = ref<AdminUser[]>([])
 const loading = ref(false)
 const errorMessage = ref('')
@@ -222,6 +233,7 @@ function closeDetails() {
 }
 
 // 修改状态前二次确认，并同步更新列表和已打开的详情。
+// 后端还会独立验证 admin 权限，不能只依赖这里隐藏按钮。
 async function toggleStatus(account: AdminUser) {
   const nextStatus: 'active' | 'disabled' = account.status === 'disabled' ? 'active' : 'disabled'
   const actionLabel = nextStatus === 'disabled' ? '禁用' : '启用'
@@ -256,7 +268,7 @@ function formatDate(value?: string): string {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('zh-CN')
 }
 
-// 页面进入后加载第一页用户数据。
+// 组件显示后读取第一页用户数据。
 onMounted(loadUsers)
 </script>
 
@@ -276,6 +288,12 @@ onMounted(loadUsers)
   justify-content: space-between;
   align-items: flex-end;
   gap: 24px;
+}
+
+.heading-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
 }
 
 .admin-heading {
