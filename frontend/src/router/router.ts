@@ -80,6 +80,12 @@ const router = createRouter({
 
         // 剧情模式路由
         {
+            path: '/avg-test',
+            name: 'AvgTest',
+            component: () => import('../views/AvgTestView.vue'),
+            meta: { requiresAuth: false }
+        },
+        {
             path: '/story',
             name: 'StoryMode',
             component: () => import('../views/StoryMode_new.vue'),

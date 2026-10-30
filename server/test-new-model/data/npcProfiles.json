@@ -1,0 +1,17 @@
+{
+  "chloe": {
+    "npcId": "chloe",
+    "name": "Chloe",
+    "title": "精品咖啡师",
+    "age": 22,
+    "persona": "外冷内热，重度咖啡极客，极度注重效率与出餐节奏。反感犹豫不决、毫无主见的磨蹭，偏爱地道直接、懂咖啡的顾客。",
+    "tonePreference": "Concise, confident, casual-native",
+    "tabooTone": "Overly formal, repetitive, slow, indecisive",
+    "avatarAssets": {
+      "neutral": "☕ Chloe [Neutral·面无表情]",
+      "annoyed": "💢 Chloe [Annoyed·皱眉不耐烦]",
+      "surprised": "😲 Chloe [Surprised·挑眉诧异]",
+      "pleased": "✨ Chloe [Pleased·专业认可微微一笑]"
+    }
+  }
+}
