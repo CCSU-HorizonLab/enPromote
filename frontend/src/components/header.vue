@@ -18,7 +18,7 @@
       <router-link to="/review-ai-chat">学习报告</router-link>
       <router-link to="/aiChatExer">AI 口语</router-link>
       <router-link to="/friends">好友</router-link>
-      <router-link v-if="isAdmin" to="/admin">管理后台</router-link>
+      <router-link v-if="hasManagementAccess" to="/admin">管理后台</router-link>
     </nav>
 
     <div class="user-actions">
@@ -50,7 +50,8 @@ import { onClickOutside } from '@vueuse/core'
 
 const router = useRouter()
 const userAvatar = avatarUrl
-const isAdmin = computed(() => user.value?.role === 'admin')
+// 仅对后台角色显示入口；这只是界面显示控制，不代替路由和后端鉴权。
+const hasManagementAccess = computed(() => ['admin', 'manager'].includes(user.value?.role || ''))
 const showDropdown = ref(false)
 const showMobileNav = ref(false)
 const dropdownRef = ref(null)
