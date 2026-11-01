@@ -3,32 +3,35 @@
     <!-- 顶部状态栏 -->
     <header class="top-nav">
       <div class="nav-brand">
-        <span class="badge-tag">RPG DND AVG · 双轨离散版</span>
+        <span class="badge-tag">AVG 语用沙盘 · 确定性天平版</span>
         <h1>{{ scenarioData?.title || '正在加载剧本...' }}</h1>
       </div>
       <div class="nav-status" v-if="scenarioData">
-        <div class="status-pill dc-pill">
-          <span class="label">目标难度</span>
-          <span class="val">DC {{ scenarioData.targetDc }}</span>
+        <div class="status-pill score-pill" :class="getScoreClass(liveScore)">
+          <span class="label">社交折服度</span>
+          <span class="val">{{ liveScore }} / 100</span>
         </div>
         <div class="status-pill round-pill">
-          <span class="label">交流轮次</span>
+          <span class="label">交互轮次</span>
           <span class="val">{{ currentRound }} 轮</span>
         </div>
+        <button class="btn-ghost" @click="showDossierModal = true">
+          📁 机密情报
+        </button>
         <button class="btn-ghost" @click="resetSession" :disabled="loading">
-          🔄 重置对局
+          🔄 重新挑战
         </button>
       </div>
     </header>
 
     <main class="main-layout" v-if="scenarioData">
-      <!-- 左栏：NPC 与双轨明牌指示器 -->
+      <!-- 左栏：NPC 人设与确定性天平状态 -->
       <aside class="npc-sidebar">
         <!-- 角色立绘与情绪卡 -->
         <div class="npc-card" :class="currentEmotion">
           <div class="avatar-box">
             <div class="avatar-placeholder" :class="currentEmotion">
-              <span class="avatar-icon">👩‍🍳</span>
+              <span class="avatar-icon">{{ npcIcon }}</span>
             </div>
             <div class="emotion-badge" :class="currentEmotion">
               {{ emotionLabel }}
@@ -41,91 +44,51 @@
           </div>
         </div>
 
-        <!-- 轨 1：Chloe 耐心槽 (Patience Hearts) -->
-        <div class="tracker-card patience-card" :class="{ 'crisis-alert': dualTrack.patienceHearts === 0 }">
+        <!-- 确定性社交破防天平 (Rapport Scale Meter) -->
+        <div class="tracker-card meter-card">
           <div class="card-header">
-            <span class="icon">⏳</span>
-            <h3>Chloe 的耐心 (Patience)</h3>
-            <span class="heart-status-tag" :class="dualTrack.patienceHearts > 0 ? 'safe' : 'danger'">
-              {{ dualTrack.patienceHearts > 0 ? '尚存耐心' : '已耗尽!' }}
+            <span class="icon">⚖️</span>
+            <h3>社交破防天平 (Rapport Meter)</h3>
+            <span class="meter-status-tag" :class="getScoreClass(liveScore)">
+              {{ getScoreTitle(liveScore) }}
             </span>
-          </div>
-          <div class="hearts-row">
-            <span
-              v-for="i in 3"
-              :key="i"
-              class="heart-icon"
-              :class="{ broken: i > dualTrack.patienceHearts }"
-            >
-              {{ i <= dualTrack.patienceHearts ? '❤️' : '💔' }}
-            </span>
-          </div>
-          <div class="tracker-sub">
-            <span v-if="dualTrack.patienceHearts > 0">
-              心碎扣减：<strong>-{{ dualTrack.brokenHearts }} 点修正</strong> (粗鲁或超时会碎心)
-            </span>
-            <span v-else class="text-danger">
-              ⚠️ 耐心已耗尽！已触发社交危机，请立即决胜！
-            </span>
-          </div>
-        </div>
-
-        <!-- 轨 2：筹码与印章 (Tokens & Stamps) -->
-        <div class="tracker-card tokens-card">
-          <div class="card-header">
-            <span class="icon">🪙</span>
-            <h3>交涉筹码与词汇印章</h3>
           </div>
 
-          <!-- 筹码槽 -->
-          <div class="token-slot-row">
-            <div class="slot-label">
-              <span>语言表现筹码</span>
-              <small>{{ dualTrack.persuasionTokens }} / 3 枚</small>
+          <!-- 刻度能量进度条 -->
+          <div class="meter-bar-container">
+            <div class="meter-bar-track">
+              <div
+                class="meter-bar-fill"
+                :style="{ width: `${liveScore}%` }"
+                :class="getScoreClass(liveScore)"
+              ></div>
+              <!-- 达标及格线 (65分) 与 高光升房线 (85分) -->
+              <div class="marker marker-standard" title="65分及格线 (标准间入住)">
+                <span class="marker-label">65 (及格)</span>
+              </div>
+              <div class="marker marker-penthouse" title="85分高光线 (行政套房升级)">
+                <span class="marker-label">85 (升房)</span>
+              </div>
             </div>
-            <div class="slots">
-              <span
-                v-for="i in 3"
-                :key="i"
-                class="coin-badge"
-                :class="{ active: i <= dualTrack.persuasionTokens }"
-              >
-                {{ i <= dualTrack.persuasionTokens ? '🪙' : '⚪' }}
-              </span>
+            <div class="meter-score-text">
+              <span class="current-score">{{ liveScore }}</span>
+              <span class="total-score">/ 100 实时折服度</span>
             </div>
           </div>
 
-          <!-- 词汇印章槽 -->
-          <div class="token-slot-row">
-            <div class="slot-label">
-              <span>核心词汇印章</span>
-              <small>{{ dualTrack.keywordStampsCount }} / 3 枚</small>
+          <!-- 客观得分要素进度盘 -->
+          <div class="rubric-breakdown">
+            <div class="rubric-item" :class="{ achieved: factsVerified.includes('hasNameStated') }">
+              <span class="r-dot">{{ factsVerified.includes('hasNameStated') ? '✅' : '⚪' }}</span>
+              <span class="r-text">姓名身份核对 (+20)</span>
             </div>
-            <div class="slots">
-              <span
-                v-for="i in 3"
-                :key="i"
-                class="stamp-badge"
-                :class="{ active: i <= dualTrack.keywordStampsCount }"
-              >
-                {{ i <= dualTrack.keywordStampsCount ? '🎯' : '⚪' }}
-              </span>
+            <div class="rubric-item" :class="{ achieved: factsVerified.includes('hasProofProvided') }">
+              <span class="r-dot">{{ factsVerified.includes('hasProofProvided') ? '✅' : '⚪' }}</span>
+              <span class="r-text">凭证/护照出示 (+20)</span>
             </div>
-          </div>
-
-          <!-- 明牌修正汇总条 -->
-          <div class="total-calc-bar">
-            <div class="calc-formula">
-              <span>+{{ dualTrack.persuasionTokens }} (筹码)</span>
-              <span>+{{ dualTrack.keywordStampsCount }} (印章)</span>
-              <span>+{{ dualTrack.baseAffinity }} (熟客)</span>
-              <span class="text-sub">-{{ dualTrack.brokenHearts }} (心碎)</span>
-            </div>
-            <div class="calc-result">
-              <small>决胜总加成</small>
-              <strong :class="dualTrack.totalPendingMod >= 0 ? 'text-positive' : 'text-danger'">
-                {{ formatMod(dualTrack.totalPendingMod) }} 点
-              </strong>
+            <div class="rubric-item" :class="{ achieved: weaponsHit.length >= 1 }">
+              <span class="r-dot">{{ weaponsHit.length >= 1 ? '🎯' : '⚪' }}</span>
+              <span class="r-text">高级词块命中 ({{ Math.min(30, weaponsHit.length * 10) }}/30)</span>
             </div>
           </div>
         </div>
@@ -134,7 +97,7 @@
         <div class="context-card">
           <div class="card-header">
             <span class="icon">🎭</span>
-            <h3>当前情境动机 (Dramatic Context)</h3>
+            <h3>当前情境动机 (Context)</h3>
           </div>
           <div class="context-item">
             <span class="label">前因缘由:</span>
@@ -153,13 +116,13 @@
 
       <!-- 右栏：对话推进舞台与行动区 -->
       <section class="stage-section">
-        <!-- 关卡通关目标条与节奏提示 -->
+        <!-- 关卡通关目标条与阶段节奏提示 (防一回杀节奏锁) -->
         <div class="objective-banner">
-          <div class="target-flag">🎯 关卡目标</div>
+          <div class="target-flag">🎯 任务目标</div>
           <p>{{ scenarioData.objectiveDescription }}</p>
           <div class="pacing-pill" :class="pacingInfo.phase" v-if="!isCompleted">
-            <span>{{ pacingInfo.label }}</span>
-            <small>{{ pacingInfo.hint }}</small>
+            <span class="pacing-badge">{{ pacingInfo.label }}</span>
+            <span class="pacing-hint">{{ pacingInfo.hint }}</span>
           </div>
         </div>
 
@@ -183,28 +146,16 @@
             <div class="bubble" :class="msg.role === 'user' ? 'user-bubble' : 'npc-bubble'">
               <span class="speaker">{{ msg.role === 'user' ? 'You' : scenarioData.npc.name }}</span>
               <p class="speech-text">{{ msg.content }}</p>
-              
-              <!-- 语言即时反馈 (针对用户输入) -->
+
+              <!-- 极简游戏动态浮标标签 (拒绝大段垃圾语法弹窗) -->
               <div v-if="msg.evaluation" class="eval-card">
                 <div class="eval-chips">
-                  <!-- 获得的筹码或碎心标记 -->
-                  <span v-if="msg.tokenEarned" class="chip token-chip">🪙 +1 获得交涉筹码！</span>
-                  <span v-if="msg.heartBroken" class="chip heart-chip">💔 失去 1 颗耐心！</span>
-                  
-                  <span class="chip" :class="getModClass(msg.evaluation.toneMod)">
-                    语气 {{ formatMod(msg.evaluation.toneMod) }} ({{ msg.evaluation.toneReason }})
+                  <span class="chip dynamic-chip" :class="msg.evaluation.dynamicTag?.includes('⚠️') ? 'chip-danger' : 'chip-success'">
+                    {{ msg.evaluation.dynamicTag || '⚡ 得体回应' }}
                   </span>
-                  <span class="chip" :class="getModClass(msg.evaluation.fluencyMod)">
-                    地道 {{ formatMod(msg.evaluation.fluencyMod) }}
+                  <span class="chip tone-chip">
+                    🎩 礼貌修养: {{ msg.evaluation.toneScore }}/30 ({{ msg.evaluation.toneFeedback }})
                   </span>
-                  <span v-if="msg.evaluation.keywordsHit?.length" class="chip hit-chip">
-                    🎯 盖下印章: {{ msg.evaluation.keywordsHit.join(', ') }}
-                  </span>
-                </div>
-                <div v-if="msg.evaluation.polishTip" class="polish-tip">
-                  <span class="polish-kicker">💡 地道说法润色：</span>
-                  <strong>"{{ msg.evaluation.polishTip.nativeSentence }}"</strong>
-                  <p>{{ msg.evaluation.polishTip.explanation }}</p>
                 </div>
               </div>
             </div>
@@ -214,185 +165,187 @@
           <div v-if="loading" class="chat-row npc-row">
             <div class="bubble npc-bubble thinking-bubble">
               <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-              <span class="thinking-text">{{ scenarioData.npc.name }} 正在打量你...</span>
+              <span class="thinking-text">{{ scenarioData.npc.name }} 正在核对终端与审视你的回答...</span>
             </div>
           </div>
 
-          <!-- 决胜结案归档卡片 (检定完成后直接在对话底部封板，不再允许发送新对白) -->
-          <div v-if="isCompleted && checkEnding" class="settlement-stage-card" :class="checkEnding.type">
-            <div class="settlement-header">
-              <span class="settlement-kicker">🎬 剧本单集交涉已落幕</span>
-              <h3>{{ checkEnding.title }}</h3>
-            </div>
-            <p class="settlement-story">{{ checkEnding.storyText }}</p>
-
-            <div class="settlement-quote">
-              <span class="speaker-tag">{{ scenarioData.npc.name }} 的最终反应：</span>
-              <p>"{{ checkEnding.npcFinalReply }}"</p>
-            </div>
-
-            <div class="settlement-takeaway">
-              <span class="takeaway-title">📋 本局语言学情复盘</span>
-              <p>{{ checkEnding.takeawayTip }}</p>
+          <!-- 结案真实消费小票卡片 (Receipt Card) -->
+          <div v-if="isCompleted && settlementData" class="receipt-stage-card" :class="settlementData.outcome">
+            <div class="receipt-header">
+              <div class="receipt-brand">
+                <span class="hotel-emblem">🏰</span>
+                <h4>THE ROYAL GARDEN HOTEL</h4>
+                <small>LONDON · NIGHT AUDIT NEGOTIATION RECEIPT</small>
+              </div>
+              <div class="receipt-stars">
+                <span v-for="s in 3" :key="s" class="star" :class="{ active: s <= settlementData.stars }">
+                  ★
+                </span>
+                <span class="stars-label">{{ settlementData.stars }} 星评级</span>
+              </div>
             </div>
 
-            <div class="settlement-actions">
-              <button class="btn-primary" @click="resetSession">🔄 再次挑战本场景</button>
+            <div class="receipt-divider"></div>
+
+            <div class="receipt-outcome">
+              <h3>{{ settlementData.title }}</h3>
+              <p class="story-desc">{{ settlementData.storyText }}</p>
+            </div>
+
+            <div class="receipt-quote">
+              <span class="quote-label">{{ scenarioData.npc.name }} 的结案表态：</span>
+              <p>"{{ settlementData.npcFinalReply }}"</p>
+            </div>
+
+            <!-- 客观明牌小票得分明细 -->
+            <div class="receipt-breakdown">
+              <div class="breakdown-title">📊 社交天平实战得分账本 (100% 实力归因)</div>
+              <div class="breakdown-grid">
+                <div class="b-row">
+                  <span>事实信息核验：</span>
+                  <strong>+{{ settlementData.scoreBreakdown.factClarityScore }} 分</strong>
+                </div>
+                <div class="b-row">
+                  <span>高级场景词块：</span>
+                  <strong>+{{ settlementData.scoreBreakdown.targetChunksScore }} 分</strong>
+                </div>
+                <div class="b-row">
+                  <span>英伦绅士礼仪：</span>
+                  <strong>+{{ settlementData.scoreBreakdown.toneScore }} 分</strong>
+                </div>
+                <div class="b-row penalty-row" v-if="settlementData.scoreBreakdown.deductions > 0">
+                  <span>违规/冒犯扣减：</span>
+                  <strong>-{{ settlementData.scoreBreakdown.deductions }} 分</strong>
+                </div>
+                <div class="b-row total-row">
+                  <span>最终总折服度：</span>
+                  <strong class="highlight-score">{{ settlementData.finalScore }} / 100</strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- 本局唯一带走金句 (One Key Takeaway) -->
+            <div class="receipt-takeaway" v-if="settlementData.oneKeyTakeaway">
+              <div class="takeaway-head">
+                <span class="takeaway-icon">🎯</span>
+                <strong>本局破局金句 (One Key Takeaway)</strong>
+              </div>
+              <p class="takeaway-sentence">"{{ settlementData.oneKeyTakeaway.nativeSentence }}"</p>
+              <p class="takeaway-note">{{ settlementData.oneKeyTakeaway.usageNote }}</p>
+              <button class="btn-deck-sync" @click="handleSyncDeck" :disabled="isSynced">
+                {{ isSynced ? '✅ 已沉淀同步至模块 A 复习词库' : '🎙️ 跟读挑战并同步入库' }}
+              </button>
+            </div>
+
+            <div class="receipt-actions">
+              <button class="btn-primary" @click="resetSession">🔄 再次演练本场景</button>
             </div>
           </div>
         </div>
 
-        <!-- 快捷场景词汇支架 (未结算时展示) -->
-        <div class="keywords-bar" v-if="!isCompleted">
-          <span class="kw-label">推荐核心表达（命中可点亮印章）：</span>
-          <div class="kw-chips">
+        <!-- 战术武器库抽屉 (新手拐杖：点击拼装骨架，彻底消灭失语症) -->
+        <div class="weapons-bar" v-if="!isCompleted">
+          <div class="weapons-title">
+            <span>🎒 战术武器库（点击碎片直接填入骨架，杜绝失语）：</span>
+          </div>
+          <div class="weapon-chips">
             <button
-              v-for="kw in scenarioData.recommendedKeywords"
-              :key="kw.word"
-              class="kw-btn"
-              :class="{ hit: isKeywordHit(kw.word) }"
-              @click="insertKeyword(kw.word)"
+              v-for="w in scenarioData.inventoryWeapons"
+              :key="w.phrase"
+              class="weapon-btn"
+              :class="{
+                hit: weaponsHit.includes(w.phrase),
+                locked: w.phase === 2 && pacingInfo.phase === 'phase1'
+              }"
+              @click="handleUseWeapon(w)"
             >
-              <strong>{{ kw.word }}</strong>
-              <small>{{ kw.meaning }}</small>
-              <span v-if="isKeywordHit(kw.word)" class="stamp-mark">🎯 已盖章</span>
+              <div class="wp-top">
+                <strong>{{ w.phrase }}</strong>
+                <span v-if="weaponsHit.includes(w.phrase)" class="tag-used">🎯 已使用</span>
+                <span v-else-if="w.phase === 2 && pacingInfo.phase === 'phase1'" class="tag-lock">🔒 阶段二解锁</span>
+              </div>
+              <small>{{ w.meaning }}</small>
             </button>
           </div>
         </div>
 
-        <!-- 输入交互与行动栏 -->
+        <!-- 输入交互栏 -->
         <div class="input-panel">
-          <!-- 未结算状态：正常输入与发起检定 -->
           <template v-if="!isCompleted">
             <div class="input-row">
               <textarea
                 v-model="userInput"
-                placeholder="用英语和 Chloe 交流（例如：Could I get an iced latte with oat milk, please?）..."
+                placeholder="用英语和 Arthur 经理交涉（例如：Good evening. I have a reservation under the name of Alex...）"
                 rows="2"
                 @keydown.enter.prevent="sendMessage"
-                :disabled="loading || isChecking || dualTrack.patienceHearts === 0"
+                :disabled="loading || isResolving"
               ></textarea>
-              <button
-                class="btn-send"
-                @click="sendMessage"
-                :disabled="!userInput.trim() || loading || isChecking || dualTrack.patienceHearts === 0"
-              >
-                发送对白 ↵
-              </button>
-            </div>
-
-            <!-- 决胜大检定触发栏 -->
-            <div class="climax-action-bar" :class="{ 'highlight-pulse': pacingInfo.phase === 'prime', 'crisis-pulse': dualTrack.patienceHearts === 0 }">
-              <div class="climax-info">
-                <span>当前决胜总加成：<strong :class="dualTrack.totalPendingMod >= 0 ? 'text-positive' : 'text-danger'">{{ formatMod(dualTrack.totalPendingMod) }} 点</strong></span>
-                <small v-if="dualTrack.patienceHearts === 0">⚠️ 耐心已耗尽，请立即掷骰发起终局交涉！</small>
-                <small v-else-if="pacingInfo.phase === 'prime'">🔥 黄金交涉窗口！筹码已满，正是提出非标特调的最佳时机！</small>
-                <small v-else-if="pacingInfo.phase === 'urgent'">⚠️ 后面队伍在催促，请尽快发起决胜检定！</small>
-                <small v-else>已交流 {{ currentRound }} 轮，建议做好铺垫后发起决胜检定</small>
+              <div class="action-buttons">
+                <button
+                  class="btn-send"
+                  @click="sendMessage"
+                  :disabled="!userInput.trim() || loading || isResolving"
+                >
+                  发送对白 ↵
+                </button>
+                <button
+                  v-if="currentRound >= 1"
+                  class="btn-resolve"
+                  @click="resolveNegotiation"
+                  :disabled="loading || isResolving"
+                >
+                  ⚖️ 结案小票
+                </button>
               </div>
-              <button
-                class="btn-climax"
-                @click="triggerClimaxCheck"
-                :disabled="loading || isChecking"
-              >
-                🎲 发起决胜检定 (Roll D20)
-              </button>
             </div>
           </template>
 
-          <!-- 已结算状态：锁定输入框，提示交涉已结束，彻底杜绝浪费算力 -->
           <template v-else>
             <div class="completed-lock-panel">
               <span class="lock-icon">🔒</span>
               <div class="lock-text">
-                <strong>本关交涉已完成，结局已达成！</strong>
-                <p>已生成完整学情复盘，对话已归档。如需尝试其他交涉口吻，请点击“重新挑战”。</p>
+                <strong>本次酒店交涉已结案落幕！</strong>
+                <p>已生成真实结案账单与学情金句。点击“重新挑战”即可尝试不同对话策略！</p>
               </div>
-              <button class="btn-primary" @click="resetSession">🔄 重新挑战</button>
+              <button class="btn-primary" @click="resetSession">🔄 再次挑战</button>
             </div>
           </template>
         </div>
       </section>
     </main>
 
-    <!-- DND 掷骰检定弹窗与结算看板 -->
-    <div v-if="showDiceModal" class="dice-modal-overlay">
-      <div class="dice-modal-content">
-        <div class="modal-header">
-          <h2>🎲 DND 决胜交涉检定</h2>
-          <p>场景目标 DC 难度：<strong>{{ scenarioData.targetDc }}</strong></p>
+    <!-- 特工机密简报弹窗 (Mission Dossier Modal) -->
+    <div v-if="showDossierModal && scenarioData" class="dossier-modal-overlay">
+      <div class="dossier-card">
+        <div class="dossier-header">
+          <span class="kicker">📁 TOP SECRET // MISSION DOSSIER</span>
+          <h2>{{ scenarioData.title }}</h2>
+          <span class="location-tag">📍 {{ scenarioData.sceneVisual.sceneName }}</span>
         </div>
-
-        <!-- 骰子动画区 -->
-        <div class="dice-arena">
-          <div class="dice-cube" :class="{ rolling: isRolling }">
-            <span class="dice-number">{{ displayedRoll }}</span>
+        <div class="dossier-body">
+          <div class="dossier-section">
+            <h4>🎯 核心任务目标 (Mission Objective)</h4>
+            <p>{{ scenarioData.objectiveDescription }}</p>
           </div>
-          <div class="dice-status-text">
-            {{ isRolling ? '正在掷出 D20 骰子...' : '骰点已确定！' }}
+          <div class="dossier-section">
+            <h4>👤 交涉目标弱点情报 (Target Intel: {{ scenarioData.npc.name }})</h4>
+            <p><strong>当前心境：</strong>{{ scenarioData.dramaticContext.currentMentalState }}</p>
+            <p class="highlight-p"><strong>隐藏软肋：</strong>{{ scenarioData.dramaticContext.hiddenSoftSpot }}</p>
           </div>
-        </div>
-
-        <!-- 修正计算明细卡 (全明牌离散整数计算) -->
-        <div class="breakdown-card" v-if="!isRolling && checkResult">
-          <h3>检定修正构成计算 (双轨离散明牌模型)</h3>
-          <div class="calc-row">
-            <div class="calc-col">
-              <span class="sub">基础骰点</span>
-              <strong>{{ checkResult.baseRoll }}</strong>
-            </div>
-            <span class="op">+</span>
-            <div class="calc-col">
-              <span class="sub">筹码 (语言表现)</span>
-              <strong>+{{ checkResult.modifiers.persuasionTokens }}</strong>
-            </div>
-            <span class="op">+</span>
-            <div class="calc-col">
-              <span class="sub">印章 (核心词汇)</span>
-              <strong>+{{ checkResult.modifiers.keywordStamps }}</strong>
-            </div>
-            <span class="op">+</span>
-            <div class="calc-col">
-              <span class="sub">熟客好感</span>
-              <strong>+{{ checkResult.modifiers.baseAffinity }}</strong>
-            </div>
-            <span class="op">-</span>
-            <div class="calc-col text-sub">
-              <span class="sub">碎心惩罚</span>
-              <strong>-{{ checkResult.modifiers.brokenHeartsPenalty }}</strong>
-            </div>
-            <span class="op">=</span>
-            <div class="calc-col total-col">
-              <span class="sub">最终总分</span>
-              <strong :class="checkResult.isPassed ? 'text-pass' : 'text-fail'">
-                {{ checkResult.finalScore }}
-              </strong>
+          <div class="dossier-section">
+            <h4>🎒 战术武器库预览 (Tactical Weapons)</h4>
+            <div class="dossier-weapons-list">
+              <div v-for="w in scenarioData.inventoryWeapons" :key="w.phrase" class="dossier-wp-item">
+                <code>{{ w.phrase }}</code>
+                <span>{{ w.meaning }}</span>
+              </div>
             </div>
           </div>
         </div>
-
-        <!-- 结算结局展示 -->
-        <div class="outcome-card" v-if="!isRolling && checkEnding" :class="checkEnding.type">
-          <div class="outcome-badge">
-            {{ getOutcomeBadge(checkEnding.type) }}
-          </div>
-          <h3 class="outcome-title">{{ checkEnding.title }}</h3>
-          <p class="story-desc">{{ checkEnding.storyText }}</p>
-
-          <div class="npc-final-quote">
-            <span class="quote-speaker">{{ scenarioData.npc.name }}:</span>
-            <p>"{{ checkEnding.npcFinalReply }}"</p>
-          </div>
-
-          <div class="takeaway-box">
-            <span class="box-title">📋 核心学情复盘</span>
-            <p>{{ checkEnding.takeawayTip }}</p>
-          </div>
-        </div>
-
-        <div class="modal-footer" v-if="!isRolling">
-          <button class="btn-primary" @click="finishAndCloseModal">查看全剧复盘</button>
-          <button class="btn-ghost" @click="resetSession">重新挑战本关</button>
+        <div class="dossier-footer">
+          <button class="btn-primary" @click="showDossierModal = false">
+            🔥 接受任务，步入酒店大堂
+          </button>
         </div>
       </div>
     </div>
@@ -407,78 +360,54 @@ const currentRound = ref(0);
 const currentEmotion = ref('neutral');
 const userInput = ref('');
 const loading = ref(false);
-const isChecking = ref(false);
-const isCompleted = ref(false); // 本关是否已结案落锁
+const isResolving = ref(false);
+const isCompleted = ref(false);
+const isSynced = ref(false);
+const showDossierModal = ref(false);
 const chatViewportRef = ref<HTMLElement | null>(null);
 
-// 双轨离散状态
-const dualTrack = ref({
-  patienceHearts: 3,
-  brokenHearts: 0,
-  persuasionTokens: 0,
-  keywordStampsCount: 0,
-  stampsList: [] as string[],
-  baseAffinity: 1,
-  totalPendingMod: 1
-});
+// 确定性天平状态
+const liveScore = ref(15);
+const factsVerified = ref<string[]>([]);
+const weaponsHit = ref<string[]>([]);
+const settlementData = ref<any>(null);
 
 const pacingInfo = ref({
-  phase: 'warmup',
-  label: '铺垫破冰期',
-  hint: '建议先表达对忙碌的理解，铺垫基础饮品需求，赚取筹码。'
+  phase: 'phase1',
+  label: 'Phase 1: 核实破冰期',
+  hint: '⚠️ Arthur 正在查验身份。请先礼貌报出预订姓名与证件/订单号，切勿直接要求升房！'
 });
 
 const messages = ref<Array<{
   role: 'user' | 'assistant';
   content: string;
   evaluation?: any;
-  tokenEarned?: boolean;
-  heartBroken?: boolean;
 }>>([]);
 
-// 骰子模态框状态
-const showDiceModal = ref(false);
-const isRolling = ref(false);
-const displayedRoll = ref(20);
-const checkResult = ref<any>(null);
-const checkEnding = ref<any>(null);
+const npcIcon = computed(() => {
+  if (scenarioData.value?.npc?.npcId === 'arthur') return '👔';
+  return '👩‍🍳';
+});
 
 const emotionLabel = computed(() => {
   switch (currentEmotion.value) {
-    case 'annoyed': return '不耐烦 💢';
-    case 'pleased': return '专业赞许 ✨';
-    case 'surprised': return '挑眉诧异 😲';
-    default: return '外冷专注 ☕';
+    case 'skeptical': return '挑眉审视 🤨';
+    case 'annoyed': return '眉头微皱 💢';
+    case 'pleased': return '优雅欠身 🎩';
+    default: return '一丝不苟 👔';
   }
 });
 
-function formatMod(val: number) {
-  if (val > 0) return `+${val}`;
-  return `${val}`;
+function getScoreClass(score: number) {
+  if (score >= 85) return 'score-penthouse';
+  if (score >= 65) return 'score-standard';
+  return 'score-risk';
 }
 
-function getModClass(val: number) {
-  if (val > 0) return 'positive';
-  if (val < 0) return 'negative';
-  return 'neutral';
-}
-
-function isKeywordHit(word: string) {
-  return dualTrack.value.stampsList.includes(word);
-}
-
-function insertKeyword(word: string) {
-  if (isCompleted.value || dualTrack.value.patienceHearts === 0) return;
-  if (!userInput.value.includes(word)) {
-    userInput.value = userInput.value ? `${userInput.value} ${word}` : word;
-  }
-}
-
-function getOutcomeBadge(type: string) {
-  if (type === 'critical_success') return '🌟 CRITICAL SUCCESS (大成功)';
-  if (type === 'reluctant_pass') return '🎲 DOG LUCK PASS (狗运涉险过关)';
-  if (type === 'success') return '✅ SUCCESS (检定通过)';
-  return '🔄 FAIL FORWARD (顺势推进)';
+function getScoreTitle(score: number) {
+  if (score >= 85) return '折服升房 (85~100)';
+  if (score >= 65) return '标准达标 (65~84)';
+  return '濒临拒单 (<65)';
 }
 
 async function scrollToBottom() {
@@ -488,20 +417,36 @@ async function scrollToBottom() {
   }
 }
 
+// 战术武器点击事件：将半成品脚手架骨架直接填入输入框
+function handleUseWeapon(w: any) {
+  if (isCompleted.value) return;
+  const scaffoldText = w.scaffold || w.phrase;
+  if (!userInput.value.includes(scaffoldText)) {
+    userInput.value = userInput.value ? `${userInput.value} ${scaffoldText}` : scaffoldText;
+  }
+}
+
+// 模拟一键跟读入库 (暗度陈仓回流模块 A)
+function handleSyncDeck() {
+  isSynced.value = true;
+  alert('🎉 恭喜！本局破局金句已成功同步沉淀至【模块 A：明日复习计划】！');
+}
+
 // 初始化关卡数据
 async function loadInitData() {
   loading.value = true;
   try {
     const res = await fetch('/api/avg-test/init');
     const json = await res.json();
-    if (json.success) {
+    if (json.success && json.data) {
       scenarioData.value = json.data;
       currentRound.value = json.data.currentRound || 0;
+      liveScore.value = json.data.liveScore || 15;
       pacingInfo.value = json.data.pacing;
-      dualTrack.value = json.data.dualTrack;
+      factsVerified.value = json.data.factsVerified || [];
+      weaponsHit.value = json.data.weaponsHit || [];
       isCompleted.value = json.data.status === 'completed';
-      checkResult.value = json.data.checkResult;
-      checkEnding.value = json.data.ending;
+      settlementData.value = json.data.settlement;
     }
   } catch (err) {
     console.error('加载剧本失败:', err);
@@ -513,7 +458,7 @@ async function loadInitData() {
 // 发送用户对白
 async function sendMessage() {
   const text = userInput.value.trim();
-  if (!text || loading.value || isCompleted.value || dualTrack.value.patienceHearts === 0) return;
+  if (!text || loading.value || isCompleted.value) return;
 
   userInput.value = '';
   messages.value.push({ role: 'user', content: text });
@@ -529,20 +474,20 @@ async function sendMessage() {
     const json = await res.json();
 
     if (json.success && json.data) {
-      currentEmotion.value = json.data.emotion || 'neutral';
       currentRound.value = json.data.currentRound;
+      liveScore.value = json.data.liveScore;
+      currentEmotion.value = json.data.emotion;
       pacingInfo.value = json.data.pacing;
-      dualTrack.value = json.data.dualTrack;
+      factsVerified.value = json.data.factsVerified || [];
+      weaponsHit.value = json.data.weaponsHit || [];
 
-      // 附加对当前发言的评估与筹码/碎心事件
+      // 给上一条用户对白打上动态浮标标签
       const lastUserMsg = messages.value[messages.value.length - 1];
       if (lastUserMsg) {
         lastUserMsg.evaluation = json.data.evaluation;
-        lastUserMsg.tokenEarned = json.data.eventTriggers?.tokenEarned;
-        lastUserMsg.heartBroken = json.data.eventTriggers?.heartBroken;
       }
 
-      // 添加 NPC 回复
+      // 添加 NPC 回应
       messages.value.push({
         role: 'assistant',
         content: json.data.npcReply
@@ -558,19 +503,12 @@ async function sendMessage() {
   }
 }
 
-// 发起关键交涉检定
-async function triggerClimaxCheck() {
-  if (isCompleted.value) return;
+// 发起结案结算 (打印小票，彻底取消 D20 骰子)
+async function resolveNegotiation() {
+  if (isCompleted.value || isResolving.value) return;
 
-  showDiceModal.value = true;
-  isRolling.value = true;
-  checkResult.value = null;
-  checkEnding.value = null;
-
-  // 骰子摇动视觉循环
-  const interval = setInterval(() => {
-    displayedRoll.value = Math.floor(Math.random() * 20) + 1;
-  }, 70);
+  isResolving.value = true;
+  loading.value = true;
 
   try {
     const res = await fetch('/api/avg-test/resolve-check', {
@@ -582,43 +520,38 @@ async function triggerClimaxCheck() {
     });
     const json = await res.json();
 
-    setTimeout(() => {
-      clearInterval(interval);
-      if (json.success && json.data) {
-        checkResult.value = json.data.checkResult;
-        checkEnding.value = json.data.ending;
-        displayedRoll.value = json.data.checkResult.baseRoll;
-        isCompleted.value = true; // 关键：标记结案落锁
-        if (json.data.ending.npcFinalEmotion) {
-          currentEmotion.value = json.data.ending.npcFinalEmotion;
-        }
+    if (json.success && json.data) {
+      settlementData.value = json.data.settlement;
+      liveScore.value = json.data.settlement.finalScore;
+      isCompleted.value = true;
+      if (json.data.settlement.npcFinalEmotion) {
+        currentEmotion.value = json.data.settlement.npcFinalEmotion;
       }
-      isRolling.value = false;
-    }, 1200);
+    }
   } catch (err) {
-    clearInterval(interval);
-    isRolling.value = false;
-    console.error('检定失败:', err);
+    console.error('结案结算失败:', err);
+  } finally {
+    isResolving.value = false;
+    loading.value = false;
+    await scrollToBottom();
   }
-}
-
-// 结束弹窗并停留在复盘卡界面
-function finishAndCloseModal() {
-  showDiceModal.value = false;
-  scrollToBottom();
 }
 
 // 重置会话
 async function resetSession() {
   loading.value = true;
   try {
-    await fetch('/api/avg-test/reset', { method: 'POST' });
+    await fetch('/api/avg-test/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: 'default' })
+    });
+    userInput.value = '';
     messages.value = [];
     currentEmotion.value = 'neutral';
-    showDiceModal.value = false;
     isCompleted.value = false;
-    checkResult.value = null;
-    checkEnding.value = null;
+    isSynced.value = false;
+    settlementData.value = null;
     await loadInitData();
   } catch (err) {
     console.error('重置失败:', err);
@@ -635,21 +568,21 @@ onMounted(() => {
 <style scoped>
 .avg-test-page {
   min-height: 100vh;
-  background: #0f172a;
+  background: #090e17;
   color: #e2e8f0;
   display: flex;
   flex-direction: column;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-/* 顶部导航 */
+/* 顶部状态栏 */
 .top-nav {
-  height: 64px;
-  background: #1e293b;
-  border-bottom: 1px solid #334155;
+  height: 60px;
+  background: #0f172a;
+  border-bottom: 1px solid #1e293b;
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
   padding: 0 24px;
 }
 .nav-brand {
@@ -658,13 +591,13 @@ onMounted(() => {
   gap: 12px;
 }
 .badge-tag {
-  background: #3b82f6;
-  color: #fff;
+  background: #1e3a5f;
+  color: #38bdf8;
   font-size: 11px;
   font-weight: 700;
   padding: 3px 8px;
   border-radius: 4px;
-  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 .nav-brand h1 {
   font-size: 18px;
@@ -678,29 +611,27 @@ onMounted(() => {
   gap: 12px;
 }
 .status-pill {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  background: #1e293b;
   padding: 4px 12px;
   border-radius: 20px;
+  display: flex;
+  gap: 6px;
   font-size: 13px;
-  background: #0f172a;
-  border: 1px solid #334155;
 }
-.dc-pill {
-  border-color: #f59e0b;
+.status-pill .label {
+  color: #94a3b8;
 }
-.dc-pill .val {
-  color: #fbbf24;
+.status-pill .val {
   font-weight: 700;
-}
-.round-pill .val {
   color: #38bdf8;
-  font-weight: 700;
 }
+.score-pill.score-penthouse .val { color: #10b981; }
+.score-pill.score-standard .val { color: #38bdf8; }
+.score-pill.score-risk .val { color: #f59e0b; }
+
 .btn-ghost {
   background: transparent;
-  border: 1px solid #475569;
+  border: 1px solid #334155;
   color: #cbd5e1;
   padding: 6px 12px;
   border-radius: 6px;
@@ -709,20 +640,20 @@ onMounted(() => {
   transition: all 0.2s;
 }
 .btn-ghost:hover {
-  background: #334155;
-  color: #fff;
+  background: #1e293b;
+  border-color: #64748b;
 }
 
-/* 主布局 */
+/* 主体布局 */
 .main-layout {
   flex: 1;
   display: grid;
-  grid-template-columns: 340px 1fr;
-  gap: 20px;
-  padding: 20px 24px;
-  max-width: 1440px;
-  margin: 0 auto;
+  grid-template-columns: 360px 1fr;
+  max-width: 1400px;
   width: 100%;
+  margin: 0 auto;
+  padding: 20px;
+  gap: 20px;
   box-sizing: border-box;
 }
 
@@ -732,266 +663,213 @@ onMounted(() => {
   flex-direction: column;
   gap: 16px;
 }
+
 .npc-card {
-  background: #1e293b;
+  background: #0f172a;
+  border: 1px solid #1e293b;
   border-radius: 12px;
-  border: 1px solid #334155;
   padding: 16px;
   display: flex;
-  gap: 14px;
-  align-items: flex-start;
-  transition: border-color 0.3s;
-}
-.npc-card.annoyed {
-  border-color: #ef4444;
-}
-.npc-card.pleased {
-  border-color: #10b981;
+  gap: 16px;
+  align-items: center;
 }
 .avatar-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
+  position: relative;
 }
 .avatar-placeholder {
-  width: 64px;
-  height: 64px;
+  width: 72px;
+  height: 72px;
+  background: #1e3a5f;
   border-radius: 50%;
-  background: #334155;
   display: flex;
   align-items: center;
   justify-content: center;
+  border: 2px solid #38bdf8;
+}
+.avatar-placeholder.skeptical { border-color: #f59e0b; }
+.avatar-placeholder.annoyed { border-color: #ef4444; }
+.avatar-placeholder.pleased { border-color: #10b981; }
+
+.avatar-icon {
   font-size: 32px;
-  border: 2px solid #475569;
-  transition: all 0.3s;
-}
-.avatar-placeholder.annoyed {
-  border-color: #ef4444;
-  background: rgba(239, 68, 68, 0.15);
-}
-.avatar-placeholder.pleased {
-  border-color: #10b981;
-  background: rgba(16, 185, 129, 0.15);
 }
 .emotion-badge {
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: #0f172a;
-  color: #94a3b8;
-  font-weight: 600;
-}
-.emotion-badge.annoyed {
-  color: #f87171;
-  border: 1px solid #ef4444;
-}
-.emotion-badge.pleased {
-  color: #34d399;
-  border: 1px solid #10b981;
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #0284c7;
+  color: #fff;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  white-space: nowrap;
 }
 .npc-info h2 {
+  margin: 0 0 4px 0;
   font-size: 16px;
-  font-weight: 700;
-  margin: 0;
   color: #f8fafc;
 }
 .npc-title {
-  font-size: 12px;
-  color: #94a3b8;
+  font-size: 11px;
+  color: #38bdf8;
+  display: block;
+  margin-bottom: 6px;
 }
 .npc-persona {
   font-size: 12px;
-  color: #cbd5e1;
-  margin: 6px 0 0 0;
+  color: #94a3b8;
   line-height: 1.4;
+  margin: 0;
 }
 
-/* 双轨指示器卡片 */
+/* 确定性破防天平卡片 */
 .tracker-card {
-  background: #1e293b;
-  border-radius: 12px;
-  border: 1px solid #334155;
-  padding: 14px;
-}
-.patience-card.crisis-alert {
-  border-color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
-  animation: pulseGlow 1.5s infinite;
-}
-.heart-status-tag {
-  font-size: 11px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 12px;
-  margin-left: auto;
-}
-.heart-status-tag.safe { background: rgba(16, 185, 129, 0.2); color: #34d399; }
-.heart-status-tag.danger { background: rgba(239, 68, 68, 0.2); color: #f87171; }
-
-.hearts-row {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  font-size: 32px;
-  padding: 8px 0;
-}
-.heart-icon {
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
-  transition: transform 0.2s;
-}
-.heart-icon.broken {
-  opacity: 0.4;
-  filter: grayscale(1);
-}
-.tracker-sub {
-  font-size: 11px;
-  color: #94a3b8;
-  text-align: center;
-}
-.text-danger {
-  color: #f87171 !important;
-  font-weight: 700;
-}
-
-/* 筹码与印章卡片 */
-.token-slot-row {
   background: #0f172a;
-  border: 1px solid #334155;
-  padding: 8px 12px;
-  border-radius: 8px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-.slot-label span {
-  font-size: 12px;
-  color: #cbd5e1;
-  display: block;
-}
-.slot-label small {
-  font-size: 10px;
-  color: #64748b;
-}
-.slots {
-  display: flex;
-  gap: 6px;
-  font-size: 20px;
-}
-.coin-badge, .stamp-badge {
-  opacity: 0.3;
-  transition: all 0.3s;
-}
-.coin-badge.active, .stamp-badge.active {
-  opacity: 1;
-  transform: scale(1.1);
-  filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.6));
-}
-
-/* 明牌总修正结算条 */
-.total-calc-bar {
-  margin-top: 10px;
-  background: rgba(59, 130, 246, 0.12);
-  border: 1px solid #3b82f6;
-  border-radius: 8px;
-  padding: 8px 12px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.calc-formula {
-  font-size: 11px;
-  color: #94a3b8;
-  display: flex;
-  gap: 6px;
-}
-.calc-formula .text-sub {
-  color: #f87171;
-}
-.calc-result {
-  text-align: right;
-}
-.calc-result small {
-  font-size: 10px;
-  color: #64748b;
-  display: block;
-}
-.calc-result strong {
-  font-size: 16px;
-}
-.text-positive {
-  color: #34d399;
-}
-
-/* 戏剧动机卡 */
-.context-card {
-  background: #1e293b;
+  border: 1px solid #1e293b;
   border-radius: 12px;
-  border: 1px solid #334155;
-  padding: 14px;
+  padding: 16px;
 }
 .card-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
   margin-bottom: 12px;
 }
 .card-header h3 {
   font-size: 13px;
-  font-weight: 700;
-  color: #cbd5e1;
   margin: 0;
-}
-.context-item {
-  margin-bottom: 8px;
-}
-.context-item:last-child {
-  margin-bottom: 0;
-}
-.context-item .label {
-  font-size: 11px;
-  font-weight: 700;
-  color: #94a3b8;
-  display: block;
-}
-.context-item p {
-  font-size: 12px;
-  margin: 2px 0 0 0;
-  line-height: 1.4;
   color: #cbd5e1;
+  flex: 1;
+  margin-left: 6px;
 }
-.mood-highlight {
-  color: #f87171 !important;
+.meter-status-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 700;
 }
-.soft-spot {
-  color: #38bdf8 !important;
+.meter-status-tag.score-penthouse { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+.meter-status-tag.score-standard { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
+.meter-status-tag.score-risk { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+
+.meter-bar-container {
+  margin-bottom: 14px;
+}
+.meter-bar-track {
+  height: 16px;
+  background: #1e293b;
+  border-radius: 8px;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.meter-bar-fill {
+  height: 100%;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.meter-bar-fill.score-penthouse { background: linear-gradient(90deg, #10b981, #34d399); }
+.meter-bar-fill.score-standard { background: linear-gradient(90deg, #0284c7, #38bdf8); }
+.meter-bar-fill.score-risk { background: linear-gradient(90deg, #d97706, #fbbf24); }
+
+.marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.4);
+}
+.marker-standard { left: 65%; }
+.marker-penthouse { left: 85%; }
+.marker-label {
+  position: absolute;
+  top: -18px;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: #64748b;
 }
 
-/* 右侧舞台 */
+.meter-score-text {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.current-score {
+  font-size: 24px;
+  font-weight: 800;
+  color: #f8fafc;
+}
+.total-score {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.rubric-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px dashed #1e293b;
+  padding-top: 10px;
+}
+.rubric-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+.rubric-item.achieved {
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+/* 情境卡片 */
+.context-card {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  padding: 16px;
+}
+.context-item {
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+.context-item .label {
+  color: #64748b;
+  display: block;
+  margin-bottom: 2px;
+}
+.context-item p {
+  margin: 0;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+.soft-spot {
+  color: #f59e0b !important;
+}
+
+/* 右栏：舞台 */
 .stage-section {
   display: flex;
   flex-direction: column;
-  background: #1e293b;
-  border-radius: 12px;
-  border: 1px solid #334155;
-  overflow: hidden;
-  height: calc(100vh - 104px);
+  gap: 12px;
+  height: calc(100vh - 100px);
 }
+
 .objective-banner {
   background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
   padding: 10px 16px;
-  border-bottom: 1px solid #334155;
   display: flex;
   align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
 }
 .target-flag {
-  background: #f59e0b;
-  color: #000;
+  background: #1e3a5f;
+  color: #38bdf8;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   padding: 2px 8px;
   border-radius: 4px;
   white-space: nowrap;
@@ -999,51 +877,35 @@ onMounted(() => {
 .objective-banner p {
   margin: 0;
   font-size: 13px;
-  color: #e2e8f0;
+  color: #cbd5e1;
   flex: 1;
 }
 .pacing-pill {
-  padding: 4px 10px;
-  border-radius: 6px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  background: #1e293b;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+.pacing-badge {
   font-size: 11px;
-  border: 1px solid transparent;
-}
-.pacing-pill.warmup {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: #3b82f6;
-  color: #60a5fa;
-}
-.pacing-pill.prime {
-  background: rgba(16, 185, 129, 0.15);
-  border-color: #10b981;
-  color: #34d399;
-  animation: pulseGlow 1.5s infinite;
-}
-.pacing-pill.urgent {
-  background: rgba(239, 68, 68, 0.15);
-  border-color: #ef4444;
-  color: #f87171;
-}
-.pacing-pill.crisis {
-  background: #ef4444;
-  color: #fff;
   font-weight: 700;
-  animation: pulseGlow 0.8s infinite;
+  color: #f59e0b;
 }
-@keyframes pulseGlow {
-  0% { opacity: 0.8; }
-  50% { opacity: 1; filter: brightness(1.2); }
-  100% { opacity: 0.8; }
+.pacing-hint {
+  font-size: 11px;
+  color: #94a3b8;
 }
 
-/* 对话流 */
+/* 对话视窗 */
 .chat-viewport {
   flex: 1;
-  overflow-y: auto;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
   padding: 20px;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -1051,553 +913,420 @@ onMounted(() => {
 .chat-row {
   display: flex;
 }
-.npc-row {
-  justify-content: flex-start;
-}
-.user-row {
-  justify-content: flex-end;
-}
+.npc-row { justify-content: flex-start; }
+.user-row { justify-content: flex-end; }
+
 .bubble {
   max-width: 75%;
   border-radius: 12px;
   padding: 12px 16px;
-  font-size: 14px;
-  line-height: 1.5;
 }
 .npc-bubble {
-  background: #334155;
-  border-bottom-left-radius: 2px;
-  color: #f8fafc;
+  background: #1e293b;
+  border: 1px solid #334155;
 }
 .user-bubble {
-  background: #2563eb;
-  border-bottom-right-radius: 2px;
-  color: #fff;
+  background: #1e3a5f;
+  border: 1px solid #0284c7;
 }
 .speaker {
   font-size: 11px;
   font-weight: 700;
-  opacity: 0.7;
+  color: #94a3b8;
   display: block;
   margin-bottom: 4px;
 }
 .speech-text {
   margin: 0;
-}
-
-/* 语言即时评价卡 */
-.eval-card {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.15);
-  font-size: 12px;
-}
-.eval-chips {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 6px;
-}
-.chip {
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-weight: 600;
-  font-size: 11px;
-}
-.chip.token-chip {
-  background: #f59e0b;
-  color: #000;
-  font-weight: 800;
-}
-.chip.heart-chip {
-  background: #ef4444;
-  color: #fff;
-  font-weight: 800;
-}
-.chip.positive {
-  background: #10b981;
-  color: #fff;
-}
-.chip.negative {
-  background: #ef4444;
-  color: #fff;
-}
-.chip.hit-chip {
-  background: #0ea5e9;
-  color: #fff;
-}
-.polish-tip {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 6px;
-  padding: 6px 10px;
-  margin-top: 6px;
-}
-.polish-kicker {
-  color: #cbd5e1;
-  font-size: 11px;
-  display: block;
-}
-.polish-tip strong {
-  color: #fbbf24;
-  display: block;
-  margin: 2px 0;
-}
-.polish-tip p {
-  margin: 0;
-  color: #94a3b8;
-  font-size: 11px;
-}
-
-/* 结算归档卡片 */
-.settlement-stage-card {
-  background: #0f172a;
-  border: 1px solid #334155;
-  border-radius: 12px;
-  padding: 20px;
-  margin-top: 12px;
-}
-.settlement-stage-card.critical_success {
-  border-color: #10b981;
-  background: rgba(16, 185, 129, 0.05);
-}
-.settlement-stage-card.reluctant_pass {
-  border-color: #f97316;
-  background: rgba(249, 115, 22, 0.08);
-}
-.settlement-stage-card.success {
-  border-color: #3b82f6;
-  background: rgba(59, 130, 246, 0.05);
-}
-.settlement-stage-card.fail_forward {
-  border-color: #f59e0b;
-  background: rgba(245, 158, 11, 0.05);
-}
-.settlement-kicker {
-  font-size: 11px;
-  font-weight: 700;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.settlement-header h3 {
-  margin: 4px 0 10px 0;
-  font-size: 18px;
+  font-size: 14px;
+  line-height: 1.5;
   color: #f8fafc;
 }
-.settlement-story {
-  font-size: 13px;
-  color: #cbd5e1;
-  line-height: 1.6;
-  margin-bottom: 14px;
-}
-.settlement-quote {
-  background: rgba(0, 0, 0, 0.3);
-  padding: 10px 14px;
-  border-radius: 8px;
-  margin-bottom: 14px;
-  border-left: 3px solid #f59e0b;
-}
-.speaker-tag {
-  font-size: 11px;
-  color: #94a3b8;
-  display: block;
-}
-.settlement-quote p {
-  margin: 2px 0 0 0;
-  font-size: 13px;
-  color: #fbbf24;
-  font-style: italic;
-}
-.settlement-takeaway {
-  background: rgba(59, 130, 246, 0.1);
-  padding: 10px 14px;
-  border-radius: 8px;
-  margin-bottom: 16px;
-}
-.takeaway-title {
-  font-size: 12px;
-  font-weight: 700;
-  color: #60a5fa;
-  display: block;
-}
-.settlement-takeaway p {
-  margin: 4px 0 0 0;
-  font-size: 12px;
-  color: #cbd5e1;
-  line-height: 1.5;
-}
-.settlement-actions {
-  display: flex;
-  justify-content: flex-end;
-}
 
-/* 关键词支架 */
-.keywords-bar {
-  background: #131d2e;
-  padding: 8px 16px;
-  border-top: 1px solid #334155;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.eval-card {
+  margin-top: 8px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
+  padding-top: 6px;
 }
-.kw-label {
-  font-size: 12px;
-  color: #94a3b8;
-  white-space: nowrap;
-}
-.kw-chips {
+.eval-chips {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
-.kw-btn {
-  background: #1e293b;
-  border: 1px solid #334155;
-  color: #e2e8f0;
-  padding: 3px 8px;
-  border-radius: 6px;
-  font-size: 12px;
-  cursor: pointer;
+.chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.chip-success { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+.chip-danger { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+.tone-chip { background: #0f172a; color: #94a3b8; border: 1px solid #334155; }
+
+/* 结案账单小票卡片 */
+.receipt-stage-card {
+  background: #090e17;
+  border: 2px dashed #38bdf8;
+  border-radius: 12px;
+  padding: 24px;
+  margin-top: 16px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+}
+.receipt-header {
   display: flex;
-  gap: 6px;
+  justify-content: space-between;
   align-items: center;
-  transition: all 0.2s;
 }
-.kw-btn:hover {
-  border-color: #3b82f6;
-  background: #2563eb;
+.receipt-brand h4 {
+  margin: 4px 0 2px 0;
+  color: #f8fafc;
+  letter-spacing: 1px;
 }
-.kw-btn.hit {
-  border-color: #0ea5e9;
-  background: rgba(14, 165, 233, 0.15);
-  color: #38bdf8;
-}
-.stamp-mark {
+.receipt-brand small {
+  color: #64748b;
   font-size: 10px;
+}
+.receipt-stars {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.star {
+  font-size: 20px;
+  color: #334155;
+}
+.star.active {
+  color: #f59e0b;
+}
+.stars-label {
+  font-size: 12px;
+  color: #cbd5e1;
   font-weight: 700;
+  margin-left: 6px;
+}
+.receipt-divider {
+  border-bottom: 1px dashed #1e293b;
+  margin: 16px 0;
+}
+.receipt-outcome h3 {
+  margin: 0 0 8px 0;
   color: #38bdf8;
+  font-size: 18px;
+}
+.story-desc {
+  font-size: 13px;
+  color: #94a3b8;
+  line-height: 1.6;
+}
+.receipt-quote {
+  background: #0f172a;
+  border-left: 3px solid #38bdf8;
+  padding: 10px 14px;
+  border-radius: 4px;
+  margin: 16px 0;
+}
+.quote-label {
+  font-size: 11px;
+  color: #64748b;
+  display: block;
+  margin-bottom: 4px;
+}
+.receipt-quote p {
+  margin: 0;
+  font-style: italic;
+  color: #e2e8f0;
 }
 
-/* 输入栏 */
-.input-panel {
+.receipt-breakdown {
   background: #0f172a;
-  padding: 14px 16px;
-  border-top: 1px solid #334155;
+  border-radius: 8px;
+  padding: 14px;
+  margin: 16px 0;
+}
+.breakdown-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #cbd5e1;
+  margin-bottom: 8px;
+}
+.breakdown-grid {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
 }
-.input-row {
+.b-row {
   display: flex;
-  gap: 10px;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #94a3b8;
 }
-.input-row textarea {
-  flex: 1;
+.b-row.total-row {
+  border-top: 1px dashed #334155;
+  padding-top: 6px;
+  margin-top: 4px;
+}
+.highlight-score {
+  font-size: 16px;
+  color: #10b981;
+}
+
+.receipt-takeaway {
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+.takeaway-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #38bdf8;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.takeaway-sentence {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f8fafc;
+  margin: 0 0 6px 0;
+}
+.takeaway-note {
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.4;
+  margin: 0 0 10px 0;
+}
+.btn-deck-sync {
+  background: #0284c7;
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-deck-sync:disabled {
+  background: #10b981;
+  cursor: default;
+}
+
+/* 战术武器库抽屉 */
+.weapons-bar {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+.weapons-title {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 8px;
+}
+.weapon-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.weapon-btn {
   background: #1e293b;
   border: 1px solid #334155;
-  border-radius: 8px;
-  color: #fff;
-  padding: 10px 12px;
-  font-size: 14px;
-  resize: none;
-  font-family: inherit;
-  outline: none;
-}
-.input-row textarea:focus {
-  border-color: #3b82f6;
-}
-.btn-send {
-  background: #3b82f6;
-  border: none;
-  color: #fff;
-  font-weight: 700;
-  padding: 0 18px;
-  border-radius: 8px;
+  border-radius: 6px;
+  padding: 6px 10px;
   cursor: pointer;
-  transition: background 0.2s;
+  text-align: left;
+  white-space: nowrap;
+  transition: all 0.2s;
 }
-.btn-send:hover:not(:disabled) {
-  background: #2563eb;
+.weapon-btn:hover:not(.locked) {
+  border-color: #38bdf8;
+  background: #1e3a5f;
 }
-.btn-send:disabled {
+.weapon-btn.hit {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+}
+.weapon-btn.locked {
   opacity: 0.5;
   cursor: not-allowed;
 }
-
-/* 决胜检定触发条 */
-.climax-action-bar {
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.3);
-  padding: 10px 14px;
-  border-radius: 8px;
+.wp-top {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 6px;
 }
-.climax-action-bar.highlight-pulse {
-  background: rgba(16, 185, 129, 0.15);
-  border-color: #10b981;
+.wp-top strong {
+  font-size: 12px;
+  color: #f8fafc;
 }
-.climax-action-bar.crisis-pulse {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: #ef4444;
+.tag-used {
+  font-size: 9px;
+  background: #10b981;
+  color: #fff;
+  padding: 1px 4px;
+  border-radius: 3px;
 }
-.climax-info span {
-  font-size: 13px;
-  color: #fbbf24;
+.tag-lock {
+  font-size: 9px;
+  background: #475569;
+  color: #cbd5e1;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.weapon-btn small {
   display: block;
-}
-.climax-info small {
-  font-size: 11px;
+  font-size: 10px;
   color: #94a3b8;
-}
-.btn-climax {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  border: none;
-  color: #000;
-  font-weight: 800;
-  padding: 10px 18px;
-  border-radius: 8px;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4);
-  transition: transform 0.1s, box-shadow 0.2s;
-}
-.btn-climax:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.6);
+  margin-top: 2px;
 }
 
-/* 结案锁定面板 */
+/* 输入控制栏 */
+.input-panel {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  padding: 12px;
+}
+.input-row {
+  display: flex;
+  gap: 12px;
+}
+.input-row textarea {
+  flex: 1;
+  background: #090e17;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #f8fafc;
+  font-size: 14px;
+  resize: none;
+}
+.input-row textarea:focus {
+  outline: none;
+  border-color: #38bdf8;
+}
+.action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.btn-send {
+  background: #0284c7;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-send:hover { background: #0369a1; }
+.btn-send:disabled { background: #334155; cursor: not-allowed; }
+
+.btn-resolve {
+  background: #1e293b;
+  border: 1px solid #f59e0b;
+  color: #f59e0b;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-resolve:hover { background: rgba(245, 158, 11, 0.1); }
+
 .completed-lock-panel {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  background: #1e293b;
-  border: 1px solid #475569;
-  padding: 12px 16px;
-  border-radius: 8px;
+  gap: 16px;
 }
-.lock-icon {
-  font-size: 24px;
-  margin-right: 12px;
-}
-.lock-text strong {
-  color: #f8fafc;
-  font-size: 14px;
-  display: block;
-}
-.lock-text p {
-  margin: 2px 0 0 0;
-  font-size: 12px;
-  color: #94a3b8;
+.lock-icon { font-size: 24px; }
+.lock-text strong { color: #38bdf8; }
+.lock-text p { margin: 2px 0 0 0; font-size: 12px; color: #94a3b8; }
+.btn-primary {
+  background: #0284c7;
+  color: #fff;
+  border: none;
+  padding: 8px 18px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
 }
 
-/* 弹窗遮罩 */
-.dice-modal-overlay {
+/* 机密简报弹窗 */
+.dossier-modal-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.75);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
-  padding: 20px;
+  z-index: 100;
+  backdrop-filter: blur(4px);
 }
-.dice-modal-content {
-  background: #1e293b;
-  border: 1px solid #475569;
-  border-radius: 16px;
-  max-width: 600px;
-  width: 100%;
+.dossier-card {
+  background: #090e17;
+  border: 1px solid #38bdf8;
+  border-radius: 12px;
+  max-width: 580px;
+  width: 90%;
   padding: 24px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
 }
-.modal-header h2 {
-  margin: 0 0 4px 0;
-  font-size: 20px;
-  color: #f8fafc;
-}
-.modal-header p {
-  margin: 0;
-  font-size: 13px;
-  color: #94a3b8;
-}
-
-.dice-arena {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 20px 0;
-}
-.dice-cube {
-  width: 90px;
-  height: 90px;
-  background: #f59e0b;
-  color: #000;
-  border-radius: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 42px;
-  font-weight: 900;
-  box-shadow: 0 10px 25px rgba(245, 158, 11, 0.4);
-  transform-origin: center;
-}
-.dice-cube.rolling {
-  animation: diceRoll 0.2s infinite;
-}
-@keyframes diceRoll {
-  0% { transform: rotate(0deg) scale(0.95); }
-  50% { transform: rotate(180deg) scale(1.05); }
-  100% { transform: rotate(360deg) scale(0.95); }
-}
-.dice-status-text {
-  margin-top: 12px;
-  font-size: 13px;
-  color: #cbd5e1;
-  font-weight: 600;
-}
-
-.breakdown-card {
-  background: #0f172a;
-  border: 1px solid #334155;
-  border-radius: 10px;
-  padding: 12px;
-  margin-bottom: 16px;
-}
-.breakdown-card h3 {
-  margin: 0 0 10px 0;
-  font-size: 12px;
-  color: #94a3b8;
-}
-.calc-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-  text-align: center;
-}
-.calc-col {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.calc-col .sub {
+.dossier-header .kicker {
   font-size: 10px;
-  color: #64748b;
-}
-.calc-col strong {
-  font-size: 15px;
-  color: #f8fafc;
-}
-.calc-row .op {
-  font-size: 14px;
-  color: #64748b;
-}
-.total-col strong {
-  font-size: 20px;
-}
-.text-pass {
-  color: #34d399;
-}
-.text-fail {
-  color: #f87171;
-}
-
-.outcome-card {
-  border-radius: 10px;
-  padding: 16px;
-  margin-bottom: 16px;
-  border: 1px solid #334155;
-}
-.outcome-card.critical_success {
-  background: rgba(16, 185, 129, 0.1);
-  border-color: #10b981;
-}
-.outcome-card.reluctant_pass {
-  background: rgba(249, 115, 22, 0.12);
-  border-color: #f97316;
-}
-.outcome-card.success {
-  background: rgba(59, 130, 246, 0.1);
-  border-color: #3b82f6;
-}
-.outcome-card.fail_forward {
-  background: rgba(245, 158, 11, 0.1);
-  border-color: #f59e0b;
-}
-.outcome-badge {
-  font-size: 11px;
   font-weight: 800;
-  padding: 2px 8px;
-  border-radius: 4px;
-  display: inline-block;
-  margin-bottom: 6px;
+  color: #38bdf8;
+  letter-spacing: 1px;
 }
-.critical_success .outcome-badge { background: #10b981; color: #fff; }
-.reluctant_pass .outcome-badge { background: #f97316; color: #fff; }
-.success .outcome-badge { background: #3b82f6; color: #fff; }
-.fail_forward .outcome-badge { background: #f59e0b; color: #000; }
-
-.outcome-title {
-  margin: 0 0 6px 0;
-  font-size: 16px;
+.dossier-header h2 {
+  margin: 4px 0;
   color: #f8fafc;
 }
-.story-desc {
-  font-size: 13px;
-  color: #cbd5e1;
-  line-height: 1.5;
-  margin: 0 0 12px 0;
-}
-.npc-final-quote {
-  background: rgba(0, 0, 0, 0.25);
-  padding: 10px 12px;
-  border-radius: 8px;
-  margin-bottom: 10px;
-}
-.quote-speaker {
-  font-size: 11px;
+.location-tag {
+  font-size: 12px;
   color: #94a3b8;
   display: block;
+  margin-bottom: 16px;
 }
-.npc-final-quote p {
-  margin: 2px 0 0 0;
+.dossier-section {
+  margin-bottom: 14px;
   font-size: 13px;
-  color: #fbbf24;
-  font-style: italic;
 }
-.takeaway-box {
-  background: rgba(59, 130, 246, 0.1);
-  padding: 10px 12px;
-  border-radius: 8px;
-}
-.box-title {
-  font-size: 11px;
-  font-weight: 700;
-  color: #60a5fa;
-  display: block;
-}
-.takeaway-box p {
-  margin: 2px 0 0 0;
-  font-size: 12px;
+.dossier-section h4 {
+  margin: 0 0 4px 0;
   color: #cbd5e1;
 }
-
-.modal-footer {
+.dossier-section p {
+  margin: 0;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+.highlight-p {
+  color: #f59e0b !important;
+  margin-top: 4px !important;
+}
+.dossier-weapons-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+.dossier-wp-item {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+}
+.dossier-wp-item code {
+  color: #38bdf8;
+  background: #0f172a;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.dossier-footer {
+  margin-top: 20px;
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-}
-.btn-primary {
-  background: #3b82f6;
-  border: none;
-  color: #fff;
-  padding: 8px 18px;
-  border-radius: 6px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.btn-primary:hover {
-  background: #2563eb;
 }
 </style>

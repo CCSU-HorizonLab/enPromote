@@ -1,4 +1,19 @@
 {
+  "arthur": {
+    "npcId": "arthur",
+    "name": "Arthur Pendelton",
+    "title": "皇家花园酒店 · 资深大堂经理",
+    "age": 52,
+    "persona": "五十多岁的英伦老派绅士主管，金丝眼镜配深色西装马甲。连续值班8小时，极度疲惫但依然恪守英伦繁文礼节。反感粗鲁、无礼和催促，但若对方礼节优雅、证据确凿且通情达理，会破例动用经理权限安排高规格房型。",
+    "tonePreference": "Polite, respectful, clear, modal verbs (Would/Could), appreciative",
+    "tabooTone": "Imperative (Give me/I want), impatient, shouting, vague, slang",
+    "avatarAssets": {
+      "neutral": "👔 Arthur [Neutral·一丝不苟扶眼镜]",
+      "skeptical": "🤨 Arthur [Skeptical·挑眉审视]",
+      "annoyed": "💢 Arthur [Annoyed·眉头微皱叹气]",
+      "pleased": "🎩 Arthur [Pleased·优雅欠身微笑]"
+    }
+  },
   "chloe": {
     "npcId": "chloe",
     "name": "Chloe",
