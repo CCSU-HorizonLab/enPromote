@@ -5,8 +5,8 @@ const UserWord = require('../modules/UserWord');
 const User = require('../modules/User');
 const Words = require('../modules/Word')
 const { getWordFromApi } = require('./third_part/getword');
-const { default: mongoose } = require('mongoose');
-const { ObjectId } = require('mongodb');
+const mongoose = require('mongoose');
+const { ObjectId } = mongoose.Types;
 // 返回复习单词列表api
 router.get('/getReviewWord', async (req, res) => {
     const userid = req.session.userid;

@@ -4,7 +4,9 @@ const { ProxyAgent, setGlobalDispatcher } = require('undici');
 const { z } = require('zod');
 
 // 配置本地代理支持 (国内访问 Google API)
-const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || 'http://127.0.0.1:7892';
+const proxyHost = process.env.PROXY_HOST || '127.0.0.1';
+const proxyPort = process.env.PROXY_PORT || '7897';
+const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || `http://${proxyHost}:${proxyPort}`;
 try {
   setGlobalDispatcher(new ProxyAgent(proxyUrl));
 } catch (e) {
@@ -31,16 +33,18 @@ async function getAi() {
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 
 /**
- * 玩家与 NPC 日常对白交互
- * 包含：NPC 回应生成 + 语言质量即时诊断 (语气修正、地道度、关键词加成、润色建议)
+ * 玩家与 NPC 日常对白交互 (语用天平实时评估)
+ * 包含：NPC 深度拟真回应 + 礼貌度/得体度即时打分 + 极简游戏动态浮标标签
  */
-async function chatWithNpc({ scenario, npc, history = [], userMessage }) {
+async function chatWithNpc({ scenario, npc, history = [], userMessage, pacingPhase = 'Phase 1: 核实破冰期' }) {
   const { generateObject, google } = await getAi();
   const ctx = scenario.dramaticContext;
 
+  const weaponsList = (scenario.inventoryWeapons || []).map(w => `"${w.phrase}" (${w.meaning})`).join(', ');
+
   const systemPrompt = `
-You are the Game Master and Roleplayer for an English-learning interactive visual novel (AVG).
-You are playing as ${npc.name} (${npc.title}).
+You are the Game Master and in-character actor for an English-learning interactive simulation AVG.
+You are roleplaying as ${npc.name} (${npc.title}).
 
 [NPC Character Profile]:
 - Personality: ${npc.persona}
@@ -49,41 +53,35 @@ You are playing as ${npc.name} (${npc.title}).
 
 [Current Dramatic Context & State]:
 - Why You Are Here: ${ctx.whyHere}
-- Current Mental State: ${ctx.currentMentalState}
+- Mental State: ${ctx.currentMentalState}
 - Immediate Goal: ${ctx.immediateGoal}
 - Hidden Soft Spot: ${ctx.hiddenSoftSpot}
+- Current Pacing Beat: ${pacingPhase}
 
 [Scene Objective]:
 ${scenario.objectiveDescription}
 
-[Target Keywords in this scene]:
-${scenario.recommendedKeywords.map(k => `"${k.word}" (${k.meaning})`).join(', ')}
+[Target Weapon Phrases in this scene]:
+${weaponsList}
 
 [Instructions]:
-1. Roleplay as ${npc.name}. Respond in spoken, natural English matching your current mood and personality. Keep it to 1-3 sentences.
-2. Choose one emotion tag from: ["neutral", "annoyed", "surprised", "pleased"].
-3. Evaluate the player's English input on:
-   - toneMod: -2 to +2 (Does it match what ${npc.name} prefers or hates?)
-   - fluencyMod: -1 to +2 (Is it natural, grammatical, and native-sounding?)
-   - keywordsHit: list of target keywords the user naturally used
-   - keywordMod: 1 point per valid target keyword (max 2 points)
-   - polishTip: provide 1 friendly native/idiomatic way to express the user's idea in Chinese/English.
+1. Roleplay as ${npc.name}. Respond strictly in authentic, spoken English matching your British gentleman or busy barista personality (1-3 natural sentences).
+2. Choose one emotion tag from: ["neutral", "skeptical", "annoyed", "pleased"].
+3. Evaluate the player's English tone and politeness:
+   - toneScore: 0 to 30 (30 = exceptional British/formal etiquette using modal verbs like 'Could I', 'I was wondering if'; 15 = acceptable normal speech; < 10 = rude imperative commands like 'Give me room', 'I want', or aggressive pushiness).
+   - toneFeedback: Short Chinese feedback (e.g. "用语得体，体现绅士修养" or "语气生硬，缺乏必要礼貌敬语").
+   - dynamicTag: A punchy 2-4 word gamer tag with an emoji (e.g. "🎩 优雅得体", "⚡ 证据确凿", "⚠️ 操之过急", "🧊 略显生硬").
+   - antiOtkTriggered: boolean (true ONLY IF player asks for complimentary upgrade prematurely in Phase 1 before identifying booking or name).
 `;
 
   const schema = z.object({
     npcReply: z.string().describe("NPC's direct spoken response in character"),
-    emotion: z.enum(["neutral", "annoyed", "surprised", "pleased"]).describe("NPC's facial expression/mood tag"),
+    emotion: z.enum(["neutral", "skeptical", "annoyed", "pleased"]).describe("NPC facial expression/mood tag"),
     evaluation: z.object({
-      toneMod: z.number().min(-2).max(2).describe("语气得体度 (-2 到 +2)"),
-      toneReason: z.string().describe("语气评价原因（简短中文）"),
-      fluencyMod: z.number().min(-1).max(2).describe("地道流利度 (-1 到 +2)"),
-      fluencyReason: z.string().describe("流利度评价原因（简短中文）"),
-      keywordsHit: z.array(z.string()).describe("命中的场景关键词"),
-      keywordMod: z.number().min(0).max(3).describe("关键词加成点数"),
-      polishTip: z.object({
-        nativeSentence: z.string().describe("更加地道原汁原味的母语者表达"),
-        explanation: z.string().describe("中文讲解这样说的好处")
-      })
+      toneScore: z.number().min(0).max(30).describe("礼貌得体度得分 (0 ~ 30)"),
+      toneFeedback: z.string().describe("礼貌评价简评 (中文)"),
+      dynamicTag: z.string().describe("极简浮动标签，如 '🎩 优雅得体'"),
+      antiOtkTriggered: z.boolean().describe("是否触发了第一阶段抢跑索要升房")
     })
   });
 
@@ -106,46 +104,49 @@ ${scenario.recommendedKeywords.map(k => `"${k.word}" (${k.meaning})`).join(', ')
 }
 
 /**
- * 决胜检定剧情生成
- * 根据检定结果（大成功/成功/顺势推进），生成 NPC 的最终反应与结语
+ * 确定性结案小票剧情生成
+ * 根据最终折服度总分（3星/2星/1星），生成 NPC 的最终台词与【单句破局金句】
  */
-async function generateCheckOutcomePlot({ scenario, npc, history, finalStatement, checkResult }) {
+async function generateSettlementReceipt({ scenario, npc, history, finalStatement, settlement }) {
   const { generateObject, google } = await getAi();
-  const ctx = scenario.dramaticContext;
 
   const systemPrompt = `
 You are the Game Master for an English-learning AVG.
-Player made their final climax statement to NPC ${npc.name}.
-A DND ability check was executed.
+Player completed their negotiation with NPC ${npc.name}.
+A deterministic Rapport Scale settlement was executed.
 
-[Climax Check Result]:
-- Outcome: ${checkResult.outcome} (critical_success, reluctant_pass, success, or fail_forward)
-- Total Score: ${checkResult.finalScore} vs Target DC: ${checkResult.targetDc}
-- Broken Hearts (Patience lost): ${checkResult.modifiers.brokenHeartsPenalty || 0} / 3
-- Persuasion Tokens Earned: ${checkResult.modifiers.persuasionTokens || 0} / 3
+[Settlement Result]:
+- Stars: ${settlement.stars} ⭐ (3 = Penthouse Suite, 2 = Standard Room, 1 = Emergency Single Room)
+- Total Score: ${settlement.finalScore} / 100
+- Outcome: ${settlement.outcome}
+- Breakdown: Fact Clarity=${settlement.scoreBreakdown.factClarityScore}, Target Chunks=${settlement.scoreBreakdown.targetChunksScore}, Tone=${settlement.scoreBreakdown.toneScore}, Deductions=${settlement.scoreBreakdown.deductions}
 
-[Preset Ending Concept]:
-${JSON.stringify(scenario.endings[checkResult.outcome] || scenario.endings.success, null, 2)}
+[Ending Description]:
+${settlement.title}: ${settlement.storyText}
 
 [Instructions]:
-Generate NPC ${npc.name}'s final in-character reaction line (1-2 sentences in English) reflecting the outcome and conversation context:
-- If critical_success (only possible when patience hearts >= 2): genuinely impressed by true coffee expertise and crisp delivery.
-- If reluctant_pass (dog luck pass: patience was drained >= 2 hearts or 0 hearts): Chloe is visibly annoyed and exasperated by player's previous stalling/hesitation, but because the queue behind is insane and player rolled lucky, she begrudgingly slams down the drink to get rid of them ("Fine! Take your oat latte and please go, the morning rush is killing me!"). ABSOLUTELY DO NOT PRAISE the player!
-- If success (normal): briskly and efficiently accepts the order.
-- If fail_forward: refuses custom order due to rush, gives regular black coffee instead with a snappy lesson.
-Also provide a concise summary for the learning report.
+1. Generate NPC ${npc.name}'s final in-character reaction line (1-2 sentences in English) reflecting the outcome:
+   - If 3 stars (critical_success): Arthur is genuinely impressed by player's British grace, grants Penthouse suite and complimentary breakfast.
+   - If 2 stars (success): Arthur briskly and professionally assigns a comfortable standard room on a quiet floor.
+   - If 1 star (fail_forward): Arthur sighs, assigns a noisy emergency single room near the elevator bank.
+2. Produce ONE high-yield golden takeaway sentence (单句破局金句):
+   - nativeSentence: The single most useful native sentence to master for luxury hotel check-ins (e.g. "I was wondering if you might have any complimentary upgrades available tonight?").
+   - usageNote: 1-2 sentence Chinese explanation of why this functional chunk works so well.
 `;
 
   const schema = z.object({
     npcFinalReply: z.string().describe("NPC final closing reaction line in English"),
-    npcFinalEmotion: z.enum(["neutral", "annoyed", "surprised", "pleased"]),
-    takeawayTip: z.string().describe("核心学情复盘与建议（中文，1~2句话）")
+    npcFinalEmotion: z.enum(["neutral", "skeptical", "annoyed", "pleased"]),
+    oneKeyTakeaway: z.object({
+      nativeSentence: z.string().describe("本局最具实战价值的唯一地道金句"),
+      usageNote: z.string().describe("中文讲解该句型的核心语用价值")
+    })
   });
 
   const res = await generateObject({
     model: google(DEFAULT_MODEL),
     system: systemPrompt,
-    prompt: `Player's final statement was: "${finalStatement}". Generate the dramatic closing response.`,
+    prompt: `Player's concluding statement was: "${finalStatement}". Generate the closing receipt details.`,
     schema
   });
 
@@ -154,5 +155,5 @@ Also provide a concise summary for the learning report.
 
 module.exports = {
   chatWithNpc,
-  generateCheckOutcomePlot
+  generateSettlementReceipt
 };

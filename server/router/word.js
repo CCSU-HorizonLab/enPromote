@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const bodyParser = require('body-parser');
-const urlencodedParser = bodyParser.urlencoded({ extended: false });
+const urlencodedParser = express.urlencoded({ extended: false });
 const User = require('../modules/User');
 const Word = require('../modules/Word');
 const UserWord = require('../modules/UserWord');
@@ -10,7 +9,6 @@ const fs = require('fs');
 const path = require('path');
 const { getWordFromApi } = require('./third_part/getword');
 const { logger, logApiError, logUserAction, logDbError } = require('../utils/logger');
-const { LEGAL_TLS_SOCKET_OPTIONS } = require('mongodb');
 const http = require('http');
 const { generateAndSaveMeaning, generateAndSaveExample } = require('../ai/aliyunExampleGenerator');
 

@@ -2,8 +2,8 @@ const express = require('express');
 const router = express.Router();
 const npcProfiles = require('./data/npcProfiles.json');
 const scenarioGraph = require('./data/scenarioGraph.json');
-const { executeCheck } = require('./services/dndCheckEngine');
-const { chatWithNpc, generateCheckOutcomePlot } = require('./services/aiService');
+const { inspectMessageObjectiveFeatures, evaluateRapportSettlement } = require('./services/rapportScaleEngine');
+const { chatWithNpc, generateSettlementReceipt } = require('./services/aiService');
 
 // 内存会话缓存 (用于测试调试)
 const sessions = new Map();
@@ -11,36 +11,51 @@ const sessions = new Map();
 function getOrCreateSession(sessionId = 'default') {
   if (!sessions.has(sessionId)) {
     sessions.set(sessionId, {
-      scenarioId: 'scenario_coffee_01',
-      npcId: 'chloe',
+      scenarioId: 'scenario_hotel_01',
+      npcId: 'arthur',
       round: 0,
       status: 'active', // 'active' | 'completed'
       history: [],
-      // 轨 1：NPC 耐心槽 (满额 3 颗心)
-      patienceHearts: 3,
-      // 轨 2：筹码与印章
-      persuasionTokens: 0, // 上限 3
-      keywordStamps: new Set(), // 上限 3
-      baseAffinity: 1, // 熟客加成 +1
-      checkResult: null,
-      ending: null
+      // 确定性天平跟踪状态
+      factsVerified: new Set(),     // 已确认事实: 'hasNameStated', 'hasProofProvided'
+      allWeaponsHit: new Set(),     // 已命中的武器短语
+      toneScores: [],               // 各轮 LLM 礼貌分 (0~30)
+      penaltyPoints: 0,             // 累积扣减分 (提前抢跑/粗鲁)
+      settlement: null              // 结案小票数据
     });
   }
   return sessions.get(sessionId);
 }
 
-// 计算当前交涉阶段
-function getPacingPhase(round, patienceHearts) {
-  if (patienceHearts <= 0) {
-    return { phase: 'crisis', label: '社交危机！', hint: '⚠️ Chloe 耐心已耗尽！已无法继续闲聊，必须立即发起决胜检定！' };
+// 计算当前交涉阶段节奏 (防一回杀节奏锁)
+function getPacingInfo(round, factsVerified) {
+  const hasName = factsVerified.has('hasNameStated');
+  if (round <= 1 && !hasName) {
+    return {
+      phase: 'phase1',
+      label: 'Phase 1: 核实破冰期',
+      hint: '⚠️ Arthur 正在查验身份。请先礼貌报出预订姓名与证件/订单号，切勿直接要求升房！'
+    };
   }
-  if (round <= 2) {
-    return { phase: 'warmup', label: '铺垫破冰期', hint: '建议先表达对忙碌的理解，铺垫基础饮品需求，赚取筹码。' };
-  }
-  if (round <= 4) {
-    return { phase: 'prime', label: '黄金决胜期', hint: '🔥 筹码与状态正处于巅峰，正是提出关键特调诉求的最佳时机！' };
-  }
-  return { phase: 'urgent', label: '高峰催促期', hint: '后面队伍在催促，Chloe 耐心受到考验，请尽快发起决胜检定！' };
+  return {
+    phase: 'phase2',
+    label: 'Phase 2: 权益博弈期',
+    hint: '🔥 身份已核实！正是提出【免费升级 complimentary upgrade】与协商权益的最佳时机！'
+  };
+}
+
+// 实时估算当前破防天平分 (0~100)
+function computeLiveRapportScore(session) {
+  let factScore = 0;
+  if (session.factsVerified.has('hasNameStated')) factScore += 20;
+  if (session.factsVerified.has('hasProofProvided')) factScore += 20;
+
+  const chunkScore = Math.min(30, session.allWeaponsHit.size * 10);
+  const avgTone = session.toneScores.length > 0
+    ? session.toneScores.reduce((a, b) => a + b, 0) / session.toneScores.length
+    : 15; // 默认初始15分
+  const raw = factScore + chunkScore + Math.round(avgTone) - session.penaltyPoints;
+  return Math.max(10, Math.min(100, raw));
 }
 
 /**
@@ -57,9 +72,8 @@ router.get('/init', (req, res) => {
       return res.status(404).json({ success: false, message: '场景或角色不存在' });
     }
 
-    const brokenHearts = 3 - session.patienceHearts;
-    const stampsCount = Math.min(3, session.keywordStamps.size);
-    const totalPendingMod = session.persuasionTokens + stampsCount + session.baseAffinity - brokenHearts;
+    const liveScore = computeLiveRapportScore(session);
+    const pacing = getPacingInfo(session.round, session.factsVerified);
 
     res.json({
       success: true,
@@ -75,25 +89,17 @@ router.get('/init', (req, res) => {
           avatarAssets: npc.avatarAssets
         },
         dramaticContext: scenario.dramaticContext,
-        targetDc: scenario.targetDc,
-        objectiveDescription: scenario.objectiveDescription,
-        recommendedKeywords: scenario.recommendedKeywords,
         openingLine: scenario.openingLine,
+        objectiveDescription: scenario.objectiveDescription,
+        inventoryWeapons: scenario.inventoryWeapons,
         climaxThresholdRound: scenario.climaxThresholdRound,
         currentRound: session.round,
         status: session.status,
-        pacing: getPacingPhase(session.round, session.patienceHearts),
-        dualTrack: {
-          patienceHearts: session.patienceHearts,
-          brokenHearts,
-          persuasionTokens: session.persuasionTokens,
-          keywordStampsCount: stampsCount,
-          stampsList: Array.from(session.keywordStamps),
-          baseAffinity: session.baseAffinity,
-          totalPendingMod
-        },
-        checkResult: session.checkResult,
-        ending: session.ending
+        pacing,
+        liveScore,
+        factsVerified: Array.from(session.factsVerified),
+        weaponsHit: Array.from(session.allWeaponsHit),
+        settlement: session.settlement
       }
     });
   } catch (error) {
@@ -104,109 +110,89 @@ router.get('/init', (req, res) => {
 
 /**
  * POST /api/avg-test/chat
- * 彻底修复：净值互斥判定，决不同时给筹码又扣心
+ * 推进交涉：防一回杀节奏锁、客观词块捕获、LLM礼貌打分
  */
 router.post('/chat', async (req, res) => {
   try {
-    const { sessionId = 'default', message } = req.body;
+    const { sessionId = 'default', message } = req.body || {};
     if (!message || !message.trim()) {
       return res.status(400).json({ success: false, message: '输入内容不能为空' });
     }
 
     const session = getOrCreateSession(sessionId);
 
-    // 核心拦截 1：如果已结案落锁，直接拒绝发对白
+    // 核心拦截：如果已结案落锁，直接拒绝发对白
     if (session.status === 'completed') {
       return res.status(400).json({
         success: false,
-        message: '本场景已完成决胜检定，故事已落幕。请重新开始或前往下一关卡！',
+        message: '本场景交涉已结案落幕。请点击“重新挑战”再次演练！',
         isCompleted: true
-      });
-    }
-
-    // 核心拦截 2：如果 3 颗心已全碎，强制要求发起决胜检定
-    if (session.patienceHearts <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Chloe 的耐心已彻底耗尽！已无法继续闲聊，请立即点击【🎲 发起决胜检定】！',
-        requireCheck: true
       });
     }
 
     const scenario = scenarioGraph[session.scenarioId];
     const npc = npcProfiles[session.npcId];
 
-    // 调用 AI 服务进行对白与语言诊断
+    // 1. 客观特征与节奏锁扫描
+    const objectiveTriggers = inspectMessageObjectiveFeatures({
+      userMessage: message.trim(),
+      currentRound: session.round,
+      inventoryWeapons: scenario.inventoryWeapons,
+      accumulatedFacts: session.factsVerified
+    });
+
+    if (objectiveTriggers.hasNameStated) {
+      session.factsVerified.add('hasNameStated');
+    }
+    if (objectiveTriggers.hasProofProvided) {
+      session.factsVerified.add('hasProofProvided');
+    }
+    objectiveTriggers.weaponsHit.forEach(w => session.allWeaponsHit.add(w));
+
+    // 防一回杀惩罚触发
+    let penaltyTag = null;
+    if (objectiveTriggers.prematureUpgradePenalty) {
+      session.penaltyPoints += 15;
+      penaltyTag = '⚠️ 操之过急 (-15: 未查实即索要升房)';
+    }
+
+    const currentPacing = getPacingInfo(session.round, session.factsVerified);
+
+    // 2. 调用 AI 进行深入角色扮演与礼貌打分
     const aiResult = await chatWithNpc({
       scenario,
       npc,
       history: session.history,
-      userMessage: message.trim()
+      userMessage: message.trim(),
+      pacingPhase: currentPacing.label
     });
 
     session.round += 1;
     session.history.push({ role: 'user', content: message.trim() });
     session.history.push({ role: 'assistant', content: aiResult.npcReply });
 
-    // === 彻底修复 1：单轮净表现计算 (Net Performance) ===
-    // 综合评价 = 语气得分 + 流利地道得分
-    const netLanguageScore = (aiResult.evaluation.toneMod || 0) + (aiResult.evaluation.fluencyMod || 0);
+    // 记录礼貌分
+    const toneScore = Math.max(0, Math.min(30, aiResult.evaluation.toneScore));
+    session.toneScores.push(toneScore);
 
-    let heartBroken = false;
-    let tokenEarned = false;
-
-    // 净分 >= 1：综合表现良好，奖 1 枚筹码 (绝不扣心)
-    if (netLanguageScore >= 1) {
-      if (session.persuasionTokens < 3) {
-        session.persuasionTokens += 1;
-        tokenEarned = true;
-      }
-    }
-    // 净分 <= -1：综合表现不佳或失礼，扣 1 颗心 (绝不给筹码)
-    else if (netLanguageScore <= -1) {
-      if (session.patienceHearts > 0) {
-        session.patienceHearts -= 1;
-        heartBroken = true;
-      }
-    }
-    // 净分 == 0：功过相抵，不奖也不扣
-
-    // 词汇印章独立计算 (自然命中核心词)
-    if (aiResult.evaluation.keywordsHit && aiResult.evaluation.keywordsHit.length > 0) {
-      aiResult.evaluation.keywordsHit.forEach(k => session.keywordStamps.add(k));
-    }
-
-    // 超时磨蹭惩罚：超过第 5 轮，每轮扣 1 颗心 (早高峰排队催促)
-    if (session.round > 5 && session.patienceHearts > 0 && !heartBroken) {
-      session.patienceHearts -= 1;
-      heartBroken = true;
-    }
-
-    const brokenHearts = 3 - session.patienceHearts;
-    const stampsCount = Math.min(3, session.keywordStamps.size);
-    const totalPendingMod = session.persuasionTokens + stampsCount + session.baseAffinity - brokenHearts;
+    const liveScore = computeLiveRapportScore(session);
+    const updatedPacing = getPacingInfo(session.round, session.factsVerified);
 
     res.json({
       success: true,
       data: {
         npcReply: aiResult.npcReply,
         emotion: aiResult.emotion,
-        evaluation: aiResult.evaluation,
-        currentRound: session.round,
-        pacing: getPacingPhase(session.round, session.patienceHearts),
-        eventTriggers: {
-          tokenEarned,
-          heartBroken
+        evaluation: {
+          toneScore: aiResult.evaluation.toneScore,
+          toneFeedback: aiResult.evaluation.toneFeedback,
+          dynamicTag: penaltyTag || aiResult.evaluation.dynamicTag
         },
-        dualTrack: {
-          patienceHearts: session.patienceHearts,
-          brokenHearts,
-          persuasionTokens: session.persuasionTokens,
-          keywordStampsCount: stampsCount,
-          stampsList: Array.from(session.keywordStamps),
-          baseAffinity: session.baseAffinity,
-          totalPendingMod
-        }
+        currentRound: session.round,
+        pacing: updatedPacing,
+        liveScore,
+        factsVerified: Array.from(session.factsVerified),
+        weaponsHit: Array.from(session.allWeaponsHit)
       }
     });
   } catch (error) {
@@ -217,19 +203,18 @@ router.post('/chat', async (req, res) => {
 
 /**
  * POST /api/avg-test/resolve-check
- * 彻底修复：心碎锁定高光结局，深度感知前文抓狂对话事实
+ * 结案请求：100% 确定性天平计算 + 生成小票明细与单句破局金句
  */
 router.post('/resolve-check', async (req, res) => {
   try {
-    const { sessionId = 'default', finalStatement, overrideRoll } = req.body;
+    const { sessionId = 'default', finalStatement } = req.body || {};
     const session = getOrCreateSession(sessionId);
 
-    if (session.status === 'completed' && session.checkResult && session.ending) {
+    if (session.status === 'completed' && session.settlement) {
       return res.json({
         success: true,
         data: {
-          checkResult: session.checkResult,
-          ending: session.ending,
+          settlement: session.settlement,
           alreadyCompleted: true
         }
       });
@@ -238,56 +223,50 @@ router.post('/resolve-check', async (req, res) => {
     const scenario = scenarioGraph[session.scenarioId];
     const npc = npcProfiles[session.npcId];
 
-    const statement = finalStatement || (session.history.length > 0 ? session.history[session.history.length - 1].content : "Could I have an oat milk latte please?");
+    const statement = finalStatement || (session.history.length > 0 ? session.history[session.history.length - 1].content : "Thank you for looking into my reservation.");
 
-    const brokenHearts = 3 - session.patienceHearts;
-    const stampsCount = Math.min(3, session.keywordStamps.size);
+    // 1. 确定性天平纯算
+    const avgTone = session.toneScores.length > 0
+      ? session.toneScores.reduce((a, b) => a + b, 0) / session.toneScores.length
+      : 15;
 
-    // 1. 执行数学检定
-    const checkResult = executeCheck({
-      targetDc: scenario.targetDc,
-      baseRoll: typeof overrideRoll === 'number' ? overrideRoll : undefined,
-      persuasionTokens: session.persuasionTokens,
-      keywordStamps: stampsCount,
-      baseAffinity: session.baseAffinity,
-      brokenHearts: brokenHearts
+    const settlementMath = evaluateRapportSettlement({
+      factsVerified: session.factsVerified,
+      allWeaponsHit: session.allWeaponsHit,
+      avgToneScore: avgTone,
+      penaltyPoints: session.penaltyPoints,
+      scenario
     });
 
-    // 2. 将前文真实的抓狂状态与心碎事实注入结局生成 Prompt
-    const contextNote = brokenHearts >= 2
-      ? `CRITICAL NOTE: The player repeatedly hesitated or made confusing statements (e.g. confusing base drink with oat milk) and Chloe's patience was drained (${brokenHearts}/3 hearts lost). She is exasperated and agrees ONLY because the morning queue is out the door and she wants them gone, NOT because she is impressed!`
-      : '';
-
-    const plotResult = await generateCheckOutcomePlot({
+    // 2. 生成结案小票 NPC 台词与单句破局金句
+    const receiptData = await generateSettlementReceipt({
       scenario,
       npc,
       history: session.history,
-      finalStatement: statement + (contextNote ? ` [Context: ${contextNote}]` : ''),
-      checkResult
+      finalStatement: statement,
+      settlement: settlementMath
     });
 
-    // 结局文案处理（优先命中场景中配置的 ending，如 reluctant_pass）
-    const endingMeta = scenario.endings[checkResult.outcome] || scenario.endings.success;
-
-    const endingData = {
-      type: checkResult.outcome,
-      title: endingMeta.title,
-      storyText: endingMeta.storyText,
-      npcFinalReply: plotResult.npcFinalReply,
-      npcFinalEmotion: plotResult.npcFinalEmotion,
-      takeawayTip: plotResult.takeawayTip
+    const fullSettlement = {
+      finalScore: settlementMath.finalScore,
+      stars: settlementMath.stars,
+      outcome: settlementMath.outcome,
+      title: settlementMath.title,
+      storyText: settlementMath.storyText,
+      scoreBreakdown: settlementMath.scoreBreakdown,
+      npcFinalReply: receiptData.npcFinalReply,
+      npcFinalEmotion: receiptData.npcFinalEmotion,
+      oneKeyTakeaway: receiptData.oneKeyTakeaway
     };
 
-    // 3. 状态落锁封板
+    // 3. 落锁封板
     session.status = 'completed';
-    session.checkResult = checkResult;
-    session.ending = endingData;
+    session.settlement = fullSettlement;
 
     res.json({
       success: true,
       data: {
-        checkResult,
-        ending: endingData
+        settlement: fullSettlement
       }
     });
   } catch (error) {
@@ -298,11 +277,16 @@ router.post('/resolve-check', async (req, res) => {
 
 /**
  * POST /api/avg-test/reset
+ * GET  /api/avg-test/reset
  */
-router.post('/reset', (req, res) => {
-  const sessionId = req.body.sessionId || 'default';
-  sessions.delete(sessionId);
-  res.json({ success: true, message: 'Session reset successfully' });
+router.all('/reset', (req, res) => {
+  try {
+    const sessionId = req.body?.sessionId || req.query?.sessionId || 'default';
+    sessions.delete(sessionId);
+    res.json({ success: true, message: 'Session reset successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 module.exports = router;
