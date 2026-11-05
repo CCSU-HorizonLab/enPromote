@@ -30,6 +30,17 @@ export interface AdminUser {
   }>
 }
 
+// 管理概况接口返回的平台账号和学习统计。
+export interface AdminOverview {
+  date: string
+  totalUsers: number
+  activeAccounts: number
+  newUsersToday: number
+  todayLearners: number
+  todayLearnedWords: number
+  totalLearnedWords: number
+}
+
 interface ApiEnvelope<T> {
   success: boolean
   message: string
@@ -40,6 +51,11 @@ interface ApiEnvelope<T> {
     total: number
     totalPages: number
   }
+}
+
+// 获取后台首页概览数据；接口会在服务端确认当前用户拥有后台权限。
+export function getAdminOverview() {
+  return request.get<ApiEnvelope<AdminOverview>>('/admin/stats')
 }
 
 // request 拦截器会把后端 data.items 规范为 data 数组，并保留 pagination。

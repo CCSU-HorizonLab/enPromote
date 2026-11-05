@@ -63,6 +63,112 @@ router.get('/users', async (req, res) => {
     }
 });
 
+// 汇总后台首页需要的账号和学习数据；学习人数按当天存在学习记录的用户计算。
+router.get('/stats', async (req, res) => {
+    try {
+        // 使用服务器本地日期切分当天范围，与学习记录写入时的日期计算方式保持一致。
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const tomorrowStart = new Date(todayStart);
+        tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+
+        // 一次聚合同时计算总览、今日注册和今日学习数据，避免逐个读取全部用户文档。
+        const [result] = await User.aggregate([
+            {
+                $project: {
+                    status: 1,
+                    registeredAt: { $ifNull: ['$createdAt', '$createTime'] },
+                    totalWords: { $ifNull: ['$totalWords', { $ifNull: ['$cet4.learnedWords', 0] }] },
+                    todayStudyRecords: {
+                        $filter: {
+                            input: { $ifNull: ['$studyHistory', []] },
+                            as: 'record',
+                            cond: {
+                                $and: [
+                                    { $gte: ['$$record.date', todayStart] },
+                                    { $lt: ['$$record.date', tomorrowStart] }
+                                ]
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                $addFields: {
+                    todayLearnedWords: {
+                        $sum: {
+                            $map: {
+                                input: '$todayStudyRecords',
+                                as: 'record',
+                                in: { $ifNull: ['$$record.words', 0] }
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                $facet: {
+                    overview: [
+                        {
+                            $group: {
+                                _id: null,
+                                totalUsers: { $sum: 1 },
+                                activeAccounts: {
+                                    $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] }
+                                },
+                                totalLearnedWords: { $sum: '$totalWords' }
+                            }
+                        }
+                    ],
+                    todayRegistrations: [
+                        { $match: { registeredAt: { $gte: todayStart, $lt: tomorrowStart } } },
+                        { $count: 'count' }
+                    ],
+                    todayStudy: [
+                        {
+                            $group: {
+                                _id: null,
+                                todayLearners: {
+                                    $sum: {
+                                        $cond: [{ $gt: [{ $size: '$todayStudyRecords' }, 0] }, 1, 0]
+                                    }
+                                },
+                                todayLearnedWords: { $sum: '$todayLearnedWords' }
+                            }
+                        }
+                    ]
+                }
+            }
+        ]);
+
+        // facet 在没有匹配数据时会返回空数组，这里把空结果转换成明确的 0。
+        const overview = result?.overview?.[0] || {};
+        const todayStudy = result?.todayStudy?.[0] || {};
+        const date = new Date();
+        const dateLabel = [
+            date.getFullYear(),
+            String(date.getMonth() + 1).padStart(2, '0'),
+            String(date.getDate()).padStart(2, '0')
+        ].join('-');
+        const stats = {
+            date: dateLabel,
+            totalUsers: overview.totalUsers || 0,
+            activeAccounts: overview.activeAccounts || 0,
+            newUsersToday: result?.todayRegistrations?.[0]?.count || 0,
+            todayLearners: todayStudy.todayLearners || 0,
+            todayLearnedWords: todayStudy.todayLearnedWords || 0,
+            totalLearnedWords: overview.totalLearnedWords || 0
+        };
+
+        logUserAction(req, 'ADMIN_VIEW_OVERVIEW', { date: dateLabel });
+        return res.json({ code: 200, message: '获取管理概况成功', data: stats });
+    } catch (error) {
+        logger.error('管理员获取管理概况失败:', error);
+        logApiError(req, error, 500);
+        return res.status(500).json({ code: 500, message: '获取管理概况失败' });
+    }
+});
+
 router.get('/users/:userId', async (req, res) => {
     try {
         // 先校验 MongoDB ObjectId，避免把非法 ID 传给 Mongoose 查询。
