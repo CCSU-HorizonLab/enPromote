@@ -18,34 +18,49 @@
     "objectiveDescription": "在系统查无此单且标准间告急的深夜，向严谨苛刻的 Arthur 查实预订，并得体地争取升级为高楼层行政套房。",
     "inventoryWeapons": [
       {
-        "phrase": "have a reservation under...",
-        "meaning": "以...名义的预订",
+        "id": "wp_reservation",
+        "phrase": "reservation under",
+        "name": "预订身份语块",
+        "chunk": "reservation under the name of",
+        "intent": "以某人名义的预订",
         "phase": 1,
-        "scaffold": "Good evening, I have a reservation under the name of..."
+        "fullScaffold": "Good evening, sir. I believe I have a reservation under the name of Alex."
       },
       {
+        "id": "wp_confirmation",
         "phrase": "confirmation number",
-        "meaning": "预订确认号",
+        "name": "确认凭据语块",
+        "chunk": "my confirmation number is",
+        "intent": "出示预订确认号进行核对",
         "phase": 1,
-        "scaffold": "Here is my confirmation number and passport."
+        "fullScaffold": "Here is my confirmation number, and here is my passport for verification."
       },
       {
-        "phrase": "here is my passport",
-        "meaning": "出示护照证件",
+        "id": "wp_passport",
+        "phrase": "passport",
+        "name": "证件出示语块",
+        "chunk": "here is my passport for verification",
+        "intent": "出示护照证件配合实名查验",
         "phase": 1,
-        "scaffold": "Here is my passport for verification."
+        "fullScaffold": "Certainly, here is my passport for your verification."
       },
       {
+        "id": "wp_upgrade",
         "phrase": "complimentary upgrade",
-        "meaning": "免费升房 (阶段二大招)",
+        "name": "高阶谈判语块",
+        "chunk": "wondering if a complimentary upgrade might be available",
+        "intent": "委婉试探升级高楼层或行政套房",
         "phase": 2,
-        "scaffold": "I was wondering if you could offer a complimentary upgrade?"
+        "fullScaffold": "Given the late hour and the system inconvenience, I was wondering if a complimentary upgrade might be available tonight?"
       },
       {
-        "phrase": "is the deposit refundable",
-        "meaning": "押金是否可退",
+        "id": "wp_deposit",
+        "phrase": "deposit refundable",
+        "name": "押金政策语块",
+        "chunk": "confirm if the security deposit is fully refundable",
+        "intent": "确认预授权押金是否全额原路退还",
         "phase": 2,
-        "scaffold": "Could you also confirm if the deposit is refundable upon check-out?"
+        "fullScaffold": "Could you also kindly confirm if the security deposit is fully refundable upon check-out?"
       }
     ],
     "climaxThresholdRound": 2,

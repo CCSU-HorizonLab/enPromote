@@ -21,6 +21,7 @@ function getOrCreateSession(sessionId = 'default') {
       allWeaponsHit: new Set(),     // 已命中的武器短语
       toneScores: [],               // 各轮 LLM 礼貌分 (0~30)
       penaltyPoints: 0,             // 累积扣减分 (提前抢跑/粗鲁)
+      usedFullScaffold: false,      // 是否启用了保底小抄整句 (若启用则封顶2星及格)
       settlement: null              // 结案小票数据
     });
   }
@@ -55,7 +56,9 @@ function computeLiveRapportScore(session) {
     ? session.toneScores.reduce((a, b) => a + b, 0) / session.toneScores.length
     : 15; // 默认初始15分
   const raw = factScore + chunkScore + Math.round(avgTone) - session.penaltyPoints;
-  return Math.max(10, Math.min(100, raw));
+  const score = Math.max(10, Math.min(100, raw));
+  // 若启用了全句小抄，实时得分上限压制在 75 (2星标准及格)
+  return session.usedFullScaffold ? Math.min(75, score) : score;
 }
 
 /**
@@ -97,6 +100,7 @@ router.get('/init', (req, res) => {
         status: session.status,
         pacing,
         liveScore,
+        usedFullScaffold: session.usedFullScaffold,
         factsVerified: Array.from(session.factsVerified),
         weaponsHit: Array.from(session.allWeaponsHit),
         settlement: session.settlement
@@ -114,12 +118,15 @@ router.get('/init', (req, res) => {
  */
 router.post('/chat', async (req, res) => {
   try {
-    const { sessionId = 'default', message } = req.body || {};
+    const { sessionId = 'default', message, usedFullScaffold } = req.body || {};
     if (!message || !message.trim()) {
       return res.status(400).json({ success: false, message: '输入内容不能为空' });
     }
 
     const session = getOrCreateSession(sessionId);
+    if (usedFullScaffold === true) {
+      session.usedFullScaffold = true;
+    }
 
     // 核心拦截：如果已结案落锁，直接拒绝发对白
     if (session.status === 'completed') {
@@ -191,6 +198,7 @@ router.post('/chat', async (req, res) => {
         currentRound: session.round,
         pacing: updatedPacing,
         liveScore,
+        usedFullScaffold: session.usedFullScaffold,
         factsVerified: Array.from(session.factsVerified),
         weaponsHit: Array.from(session.allWeaponsHit)
       }
@@ -235,6 +243,7 @@ router.post('/resolve-check', async (req, res) => {
       allWeaponsHit: session.allWeaponsHit,
       avgToneScore: avgTone,
       penaltyPoints: session.penaltyPoints,
+      usedFullScaffold: session.usedFullScaffold,
       scenario
     });
 
@@ -253,6 +262,8 @@ router.post('/resolve-check', async (req, res) => {
       outcome: settlementMath.outcome,
       title: settlementMath.title,
       storyText: settlementMath.storyText,
+      scaffoldCapTriggered: settlementMath.scaffoldCapTriggered,
+      usedFullScaffold: session.usedFullScaffold,
       scoreBreakdown: settlementMath.scoreBreakdown,
       npcFinalReply: receiptData.npcFinalReply,
       npcFinalEmotion: receiptData.npcFinalEmotion,

@@ -15,6 +15,10 @@
           <span class="label">交互轮次</span>
           <span class="val">{{ currentRound }} 轮</span>
         </div>
+        <div class="status-pill mode-pill" :class="usedFullScaffold ? 'mode-pill-cheat' : 'mode-pill-pro'">
+          <span class="label">交涉战法</span>
+          <span class="val">{{ usedFullScaffold ? '⚠️ 小抄保底 (限2星)' : '🏆 脱稿组装 (冲3星)' }}</span>
+        </div>
         <button class="btn-ghost" @click="showDossierModal = true">
           📁 机密情报
         </button>
@@ -187,6 +191,12 @@
 
             <div class="receipt-divider"></div>
 
+            <!-- 小抄封顶或脱稿认证印章 -->
+            <div class="receipt-stamp" :class="settlementData.scaffoldCapTriggered ? 'stamp-cap' : 'stamp-pro'" v-if="settlementData.scaffoldCapTriggered || settlementData.stars === 3">
+              <span v-if="settlementData.scaffoldCapTriggered">📑 ASSISTED DRAFT · 2-STAR CAPPED (已触发小抄封顶)</span>
+              <span v-else>🏆 AUTHENTIC NEGOTIATION · 纯脱稿组装认证</span>
+            </div>
+
             <div class="receipt-outcome">
               <h3>{{ settlementData.title }}</h3>
               <p class="story-desc">{{ settlementData.storyText }}</p>
@@ -217,11 +227,21 @@
                   <span>违规/冒犯扣减：</span>
                   <strong>-{{ settlementData.scoreBreakdown.deductions }} 分</strong>
                 </div>
+                <div class="b-row cap-row" v-if="settlementData.scaffoldCapTriggered">
+                  <span>小抄使用封顶规则：</span>
+                  <strong class="color-warning">触发封顶 (得分压制至 75 分)</strong>
+                </div>
                 <div class="b-row total-row">
                   <span>最终总折服度：</span>
                   <strong class="highlight-score">{{ settlementData.finalScore }} / 100</strong>
                 </div>
               </div>
+            </div>
+
+            <!-- 针对抄小抄的认知复盘建议 -->
+            <div class="receipt-pedagogy-tip" v-if="settlementData.scaffoldCapTriggered">
+              <div class="ptip-head">💡 认知科学复盘建议</div>
+              <p>本局你使用了全句小抄顺利过关。但若想解锁 Arthur 的 <strong>3星【顶层行政套房】</strong>，下一局请尝试仅使用<strong>“装配语块”</strong>拼接短语，靠自己的语法粘合脱稿表达！</p>
             </div>
 
             <!-- 本局唯一带走金句 (One Key Takeaway) -->
@@ -243,39 +263,78 @@
           </div>
         </div>
 
-        <!-- 战术武器库抽屉 (新手拐杖：点击拼装骨架，彻底消灭失语症) -->
+        <!-- 战术语块匣 (Tactical Chunk Deck: 拒绝无脑整句填入，给零件让玩家自己拼) -->
         <div class="weapons-bar" v-if="!isCompleted">
-          <div class="weapons-title">
-            <span>🎒 战术武器库（点击碎片直接填入骨架，杜绝失语）：</span>
+          <div class="weapons-header">
+            <div class="wh-titles">
+              <span class="wh-title">🧩 战术语块匣 (Tactical Chunk Deck)</span>
+              <span class="wh-sub">点击【+ 装配语块】填入核心短语，需自行补充完整主谓与敬语；脱稿完成冲击 3 星顶级套房！</span>
+            </div>
+            <div class="wh-mode-indicator">
+              <span v-if="usedFullScaffold" class="badge-mode-cheat">⚠️ 小抄保底中 (封顶2星)</span>
+              <span v-else class="badge-mode-pro">🏆 脱稿组装 (冲刺3星)</span>
+            </div>
           </div>
+
           <div class="weapon-chips">
-            <button
+            <div
               v-for="w in scenarioData.inventoryWeapons"
-              :key="w.phrase"
-              class="weapon-btn"
+              :key="w.id || w.phrase"
+              class="weapon-card"
               :class="{
                 hit: weaponsHit.includes(w.phrase),
                 locked: w.phase === 2 && pacingInfo.phase === 'phase1'
               }"
-              @click="handleUseWeapon(w)"
             >
-              <div class="wp-top">
-                <strong>{{ w.phrase }}</strong>
-                <span v-if="weaponsHit.includes(w.phrase)" class="tag-used">🎯 已使用</span>
+              <div class="wc-top">
+                <div class="wc-name-row">
+                  <span class="wc-phase-tag" :class="`phase-${w.phase}`">P{{ w.phase }}</span>
+                  <strong class="wc-name">{{ w.name || w.phrase }}</strong>
+                </div>
+                <span v-if="weaponsHit.includes(w.phrase)" class="tag-used">🎯 已命中</span>
                 <span v-else-if="w.phase === 2 && pacingInfo.phase === 'phase1'" class="tag-lock">🔒 阶段二解锁</span>
               </div>
-              <small>{{ w.meaning }}</small>
-            </button>
+              <div class="wc-intent">{{ w.intent || w.meaning }}</div>
+              <div class="wc-chunk">
+                <code>{{ w.chunk || w.phrase }}</code>
+              </div>
+              <div class="wc-actions">
+                <button
+                  class="btn-insert-chunk"
+                  :disabled="w.phase === 2 && pacingInfo.phase === 'phase1'"
+                  @click="handleInsertChunk(w)"
+                  title="装配语块（不会触发小抄惩罚）"
+                >
+                  🧩 + 装配语块
+                </button>
+                <button
+                  class="btn-peek-full"
+                  @click="handleOpenPeek(w)"
+                  title="偷看整句示范（若一键抄入将锁定2星上限）"
+                >
+                  👀 偷看整句
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
         <!-- 输入交互栏 -->
         <div class="input-panel">
           <template v-if="!isCompleted">
+            <!-- 状态提示浮条 -->
+            <div v-if="usedFullScaffold" class="scaffold-warning-bar">
+              <span>⚠️ 本局已启用全句小抄保底：终局结算将封顶在 2 星（及格标准大床房），无法获得 3 星顶层行政套房。</span>
+            </div>
+            <div v-if="actionToast" class="action-toast-bar">
+              <span>{{ actionToast }}</span>
+            </div>
+
             <div class="input-row">
               <textarea
+                ref="textareaRef"
                 v-model="userInput"
-                placeholder="用英语和 Arthur 经理交涉（例如：Good evening. I have a reservation under the name of Alex...）"
+                placeholder="用英语和 Arthur 经理交涉（例如：Good evening. I believe I have a reservation under the name of Alex...）"
                 rows="2"
                 @keydown.enter.prevent="sendMessage"
                 :disabled="loading || isResolving"
@@ -313,6 +372,59 @@
         </div>
       </section>
     </main>
+
+    <!-- 偷看整句示范与小抄警示弹窗 (Peek Modal) -->
+    <div v-if="peekWeapon" class="peek-modal-overlay" @click.self="peekWeapon = null">
+      <div class="peek-card">
+        <div class="peek-header">
+          <div class="peek-badge-row">
+            <span class="peek-kicker">🔍 场外战术情报支援</span>
+            <span class="peek-warning-tag">⚠️ 抄答案将锁定2星</span>
+          </div>
+          <h2>{{ peekWeapon.name || peekWeapon.phrase }}</h2>
+          <button class="btn-close-peek" @click="peekWeapon = null">✕</button>
+        </div>
+
+        <div class="peek-body">
+          <div class="peek-group">
+            <span class="peek-lbl">🎯 战术沟通意图：</span>
+            <p class="peek-txt">{{ peekWeapon.intent || peekWeapon.meaning }}</p>
+          </div>
+
+          <div class="peek-group">
+            <span class="peek-lbl">🧩 核心承载语块 (建议重点记忆)：</span>
+            <div class="chunk-highlight-box">
+              <code>{{ peekWeapon.chunk || peekWeapon.phrase }}</code>
+            </div>
+          </div>
+
+          <div class="peek-group">
+            <span class="peek-lbl">📜 地道示范全句 (完整参考)：</span>
+            <div class="full-sentence-box">
+              "{{ peekWeapon.fullScaffold || peekWeapon.scaffold }}"
+            </div>
+          </div>
+
+          <div class="peek-rule-box">
+            <strong>⚠️ 规则与认知科学警示：</strong>
+            <p>
+              语言学习的本质在于<strong>“主动提取编码”</strong>。全句直接复制会产生虚假的掌握感。<br>
+              • <strong>选择【记住了，自己打】</strong>：不触发任何惩罚，保持 <strong>3星顶层行政套房</strong> 冲击资格！<br>
+              • <strong>选择【一键抄入】</strong>：将为你完整填入此句，但本局终局结算<strong>锁死在 2 星及格（标准大床房）</strong>。
+            </p>
+          </div>
+        </div>
+
+        <div class="peek-footer">
+          <button class="btn-primary btn-remember" @click="handleRememberAndType">
+            💪 我记住了，我自己打 (冲击 3 星)
+          </button>
+          <button class="btn-ghost btn-copy-cheat" @click="handleApplyFullScaffold">
+            📋 实在想不出，一键抄入 (接受 2 星上限)
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- 特工机密简报弹窗 (Mission Dossier Modal) -->
     <div v-if="showDossierModal && scenarioData" class="dossier-modal-overlay">
@@ -365,6 +477,21 @@ const isCompleted = ref(false);
 const isSynced = ref(false);
 const showDossierModal = ref(false);
 const chatViewportRef = ref<HTMLElement | null>(null);
+const textareaRef = ref<HTMLTextAreaElement | null>(null);
+
+// 小抄与战术语块状态
+const usedFullScaffold = ref(false);
+const peekWeapon = ref<any>(null);
+const actionToast = ref('');
+let toastTimer: any = null;
+
+function showToast(msg: string) {
+  actionToast.value = msg;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    actionToast.value = '';
+  }, 3800);
+}
 
 // 确定性天平状态
 const liveScore = ref(15);
@@ -417,13 +544,48 @@ async function scrollToBottom() {
   }
 }
 
-// 战术武器点击事件：将半成品脚手架骨架直接填入输入框
-function handleUseWeapon(w: any) {
+// 战术语块点击：仅装配核心语块到输入框，不喂完整句子，强迫大脑主动造句
+function handleInsertChunk(w: any) {
   if (isCompleted.value) return;
-  const scaffoldText = w.scaffold || w.phrase;
-  if (!userInput.value.includes(scaffoldText)) {
-    userInput.value = userInput.value ? `${userInput.value} ${scaffoldText}` : scaffoldText;
+  const chunkText = w.chunk || w.phrase;
+  if (!userInput.value.includes(chunkText)) {
+    if (!userInput.value.trim()) {
+      userInput.value = chunkText;
+    } else {
+      userInput.value = `${userInput.value.trim()} ${chunkText}`;
+    }
   }
+  showToast(`🧩 已装配核心语块【${chunkText}】，请自行补充主谓语与敬词！`);
+  nextTick(() => {
+    textareaRef.value?.focus();
+  });
+}
+
+// 展开偷看整句示范弹窗
+function handleOpenPeek(w: any) {
+  peekWeapon.value = w;
+}
+
+// 选项A：记住了，自己打（保持3星资格）
+function handleRememberAndType() {
+  peekWeapon.value = null;
+  showToast('💪 坚持自主脱稿输入！3星顶层行政套房冲击资格依然有效！');
+  nextTick(() => {
+    textareaRef.value?.focus();
+  });
+}
+
+// 选项B：一键抄入（启用小抄保底，封顶2星）
+function handleApplyFullScaffold() {
+  if (!peekWeapon.value) return;
+  const full = peekWeapon.value.fullScaffold || peekWeapon.value.scaffold;
+  userInput.value = full;
+  usedFullScaffold.value = true;
+  peekWeapon.value = null;
+  showToast('⚠️ 已启用全句小抄：本局终局结算上限锁死为 2 星及格！');
+  nextTick(() => {
+    textareaRef.value?.focus();
+  });
 }
 
 // 模拟一键跟读入库 (暗度陈仓回流模块 A)
@@ -443,6 +605,7 @@ async function loadInitData() {
       currentRound.value = json.data.currentRound || 0;
       liveScore.value = json.data.liveScore || 15;
       pacingInfo.value = json.data.pacing;
+      usedFullScaffold.value = !!json.data.usedFullScaffold;
       factsVerified.value = json.data.factsVerified || [];
       weaponsHit.value = json.data.weaponsHit || [];
       isCompleted.value = json.data.status === 'completed';
@@ -469,7 +632,10 @@ async function sendMessage() {
     const res = await fetch('/api/avg-test/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text })
+      body: JSON.stringify({
+        message: text,
+        usedFullScaffold: usedFullScaffold.value
+      })
     });
     const json = await res.json();
 
@@ -478,6 +644,7 @@ async function sendMessage() {
       liveScore.value = json.data.liveScore;
       currentEmotion.value = json.data.emotion;
       pacingInfo.value = json.data.pacing;
+      usedFullScaffold.value = !!json.data.usedFullScaffold;
       factsVerified.value = json.data.factsVerified || [];
       weaponsHit.value = json.data.weaponsHit || [];
 
@@ -551,6 +718,9 @@ async function resetSession() {
     currentEmotion.value = 'neutral';
     isCompleted.value = false;
     isSynced.value = false;
+    usedFullScaffold.value = false;
+    peekWeapon.value = null;
+    actionToast.value = '';
     settlementData.value = null;
     await loadInitData();
   } catch (err) {
@@ -628,6 +798,19 @@ onMounted(() => {
 .score-pill.score-penthouse .val { color: #10b981; }
 .score-pill.score-standard .val { color: #38bdf8; }
 .score-pill.score-risk .val { color: #f59e0b; }
+
+.mode-pill.mode-pill-cheat {
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+.mode-pill.mode-pill-cheat .val {
+  color: #f59e0b;
+}
+.mode-pill.mode-pill-pro {
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+.mode-pill.mode-pill-pro .val {
+  color: #10b981;
+}
 
 .btn-ghost {
   background: transparent;
@@ -1036,6 +1219,27 @@ onMounted(() => {
   color: #e2e8f0;
 }
 
+.receipt-stamp {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  margin-bottom: 14px;
+  text-transform: uppercase;
+}
+.stamp-cap {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+.stamp-pro {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
 .receipt-breakdown {
   background: #0f172a;
   border-radius: 8px;
@@ -1059,6 +1263,14 @@ onMounted(() => {
   font-size: 12px;
   color: #94a3b8;
 }
+.b-row.cap-row {
+  background: rgba(245, 158, 11, 0.1);
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+.color-warning {
+  color: #f59e0b;
+}
 .b-row.total-row {
   border-top: 1px dashed #334155;
   padding-top: 6px;
@@ -1067,6 +1279,26 @@ onMounted(() => {
 .highlight-score {
   font-size: 16px;
   color: #10b981;
+}
+
+.receipt-pedagogy-tip {
+  background: rgba(245, 158, 11, 0.08);
+  border-left: 3px solid #f59e0b;
+  padding: 10px 14px;
+  border-radius: 0 6px 6px 0;
+  margin-bottom: 14px;
+}
+.ptip-head {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f59e0b;
+  margin-bottom: 4px;
+}
+.receipt-pedagogy-tip p {
+  margin: 0;
+  font-size: 12px;
+  color: #cbd5e1;
+  line-height: 1.5;
 }
 
 .receipt-takeaway {
@@ -1111,74 +1343,381 @@ onMounted(() => {
   cursor: default;
 }
 
-/* 战术武器库抽屉 */
+/* 战术语块匣 (Tactical Chunk Deck) */
 .weapons-bar {
-  background: #0f172a;
-  border: 1px solid #1e293b;
-  border-radius: 10px;
-  padding: 10px 14px;
+  background: #0d1527;
+  border: 1px solid #1e2d4d;
+  border-radius: 12px;
+  padding: 12px 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
 }
-.weapons-title {
-  font-size: 11px;
-  color: #94a3b8;
-  margin-bottom: 8px;
-}
-.weapon-chips {
+.weapons-header {
   display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 4px;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
-.weapon-btn {
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 6px;
-  padding: 6px 10px;
-  cursor: pointer;
-  text-align: left;
-  white-space: nowrap;
-  transition: all 0.2s;
+.wh-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
-.weapon-btn:hover:not(.locked) {
-  border-color: #38bdf8;
-  background: #1e3a5f;
-}
-.weapon-btn.hit {
-  border-color: #10b981;
-  background: rgba(16, 185, 129, 0.1);
-}
-.weapon-btn.locked {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.wp-top {
+.wh-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f8fafc;
   display: flex;
   align-items: center;
   gap: 6px;
 }
-.wp-top strong {
+.wh-sub {
+  font-size: 11px;
+  color: #64748b;
+}
+.badge-mode-cheat {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+.badge-mode-pro {
+  font-size: 11px;
+  font-weight: 700;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+
+/* 语块卡片网格 */
+.weapon-chips {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+.weapon-card {
+  min-width: 220px;
+  max-width: 260px;
+  flex-shrink: 0;
+  background: #111b33;
+  border: 1px solid #233457;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.weapon-card:hover:not(.locked) {
+  border-color: #38bdf8;
+  background: #162445;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.15);
+}
+.weapon-card.hit {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.08);
+}
+.weapon-card.locked {
+  opacity: 0.55;
+  filter: grayscale(0.5);
+  cursor: not-allowed;
+}
+
+.wc-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.wc-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wc-phase-tag {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.wc-phase-tag.phase-1 {
+  background: #1e3a5f;
+  color: #38bdf8;
+}
+.wc-phase-tag.phase-2 {
+  background: #4a2800;
+  color: #fbbf24;
+}
+.wc-name {
   font-size: 12px;
-  color: #f8fafc;
+  color: #f1f5f9;
+  font-weight: 700;
 }
 .tag-used {
-  font-size: 9px;
-  background: #10b981;
-  color: #fff;
-  padding: 1px 4px;
-  border-radius: 3px;
+  font-size: 10px;
+  background: #065f46;
+  color: #34d399;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
 }
 .tag-lock {
-  font-size: 9px;
-  background: #475569;
-  color: #cbd5e1;
-  padding: 1px 4px;
-  border-radius: 3px;
-}
-.weapon-btn small {
-  display: block;
   font-size: 10px;
+  background: #334155;
   color: #94a3b8;
-  margin-top: 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.wc-intent {
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.3;
+}
+.wc-chunk {
+  background: #090e1a;
+  border: 1px solid #1e293b;
+  border-radius: 4px;
+  padding: 5px 8px;
+}
+.wc-chunk code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  color: #38bdf8;
+  word-break: break-all;
+}
+
+.wc-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.btn-insert-chunk {
+  flex: 1;
+  background: #0284c7;
+  color: #ffffff;
+  border: none;
+  border-radius: 5px;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-insert-chunk:hover:not(:disabled) {
+  background: #0369a1;
+}
+.btn-insert-chunk:disabled {
+  background: #334155;
+  cursor: not-allowed;
+}
+.btn-peek-full {
+  background: transparent;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  border-radius: 5px;
+  padding: 5px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.btn-peek-full:hover {
+  background: #1e293b;
+  color: #f8fafc;
+  border-color: #64748b;
+}
+
+/* 输入控制栏小抄警示与提示条 */
+.scaffold-warning-bar {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #f59e0b;
+  margin-bottom: 8px;
+}
+.action-toast-bar {
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #38bdf8;
+  margin-bottom: 8px;
+  animation: fadeInToast 0.25s ease-out;
+}
+@keyframes fadeInToast {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 偷看全句弹窗 (Peek Modal) */
+.peek-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 110;
+  backdrop-filter: blur(5px);
+}
+.peek-card {
+  background: #0d1527;
+  border: 1px solid #38bdf8;
+  border-radius: 12px;
+  max-width: 540px;
+  width: 90%;
+  padding: 24px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+  animation: scaleInModal 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes scaleInModal {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+.peek-header {
+  position: relative;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #1e293b;
+  padding-bottom: 12px;
+}
+.peek-badge-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.peek-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  color: #38bdf8;
+  letter-spacing: 1px;
+}
+.peek-warning-tag {
+  font-size: 10px;
+  font-weight: 700;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.15);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.peek-header h2 {
+  margin: 0;
+  font-size: 18px;
+  color: #f8fafc;
+}
+.btn-close-peek {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 18px;
+  cursor: pointer;
+}
+.btn-close-peek:hover {
+  color: #f8fafc;
+}
+
+.peek-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.peek-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.peek-lbl {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+}
+.peek-txt {
+  margin: 0;
+  font-size: 13px;
+  color: #cbd5e1;
+}
+.chunk-highlight-box {
+  background: #090e1a;
+  border: 1px solid #1e293b;
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+.chunk-highlight-box code {
+  color: #38bdf8;
+  font-size: 13px;
+  font-weight: 700;
+}
+.full-sentence-box {
+  background: #111b33;
+  border: 1px solid #233457;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #f1f5f9;
+  font-style: italic;
+  line-height: 1.5;
+}
+.peek-rule-box {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 11px;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+.peek-rule-box strong {
+  color: #f59e0b;
+}
+
+.peek-footer {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+.btn-remember {
+  flex: 1.2;
+  background: #0284c7;
+  color: #fff;
+  border: none;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.btn-remember:hover {
+  background: #0369a1;
+}
+.btn-copy-cheat {
+  flex: 1;
+  border: 1px solid #475569;
+  color: #94a3b8;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  background: transparent;
+}
+.btn-copy-cheat:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: #ef4444;
+  color: #ef4444;
 }
 
 /* 输入控制栏 */

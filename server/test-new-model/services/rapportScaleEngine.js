@@ -67,6 +67,7 @@ function inspectMessageObjectiveFeatures({ userMessage = '', currentRound = 0, i
  * @param {Set<string>} params.allWeaponsHit - 全场命中的高级词块集合
  * @param {number} params.avgToneScore - 整场由 LLM 评定的平均礼貌得分 (0~30)
  * @param {number} params.penaltyPoints - 累积的扣除分 (犹豫/冒犯/提前抢跑)
+ * @param {boolean} [params.usedFullScaffold=false] - 是否启用了保底现成小抄 (若启用则封顶2星及格)
  * @param {Object} params.scenario - 场景配置
  */
 function evaluateRapportSettlement({
@@ -74,6 +75,7 @@ function evaluateRapportSettlement({
   allWeaponsHit = new Set(),
   avgToneScore = 20,
   penaltyPoints = 0,
+  usedFullScaffold = false,
   scenario
 }) {
   // 1. 事实证据得分 (0 ~ 40)
@@ -92,15 +94,24 @@ function evaluateRapportSettlement({
 
   // 5. 最终折服度总分 (0 ~ 100)
   const rawScore = factClarityScore + targetChunksScore + toneScore - deductions;
-  const finalScore = Math.max(10, Math.min(100, rawScore));
+  let finalScore = Math.max(10, Math.min(100, rawScore));
 
-  // 6. 确定性三档结局分流
+  // 6. 确定性三档结局分流 (含小抄支架封顶拦截)
   let outcome = 'fail_forward';
   let stars = 1;
+  let scaffoldCapTriggered = false;
 
   if (finalScore >= 85) {
-    outcome = 'critical_success';
-    stars = 3;
+    if (usedFullScaffold) {
+      // 触发小抄惩罚上限：封顶2星 (75分)
+      scaffoldCapTriggered = true;
+      finalScore = 75;
+      outcome = 'success';
+      stars = 2;
+    } else {
+      outcome = 'critical_success';
+      stars = 3;
+    }
   } else if (finalScore >= 65) {
     outcome = 'success';
     stars = 2;
@@ -115,14 +126,19 @@ function evaluateRapportSettlement({
     finalScore,
     stars,
     outcome,
+    scaffoldCapTriggered,
+    usedFullScaffold,
     scoreBreakdown: {
       factClarityScore,       // 0 ~ 40 (身份与证据)
       targetChunksScore,      // 0 ~ 30 (高级场景词块)
       toneScore,              // 0 ~ 30 (英伦礼貌与风度)
-      deductions              // 扣减分
+      deductions,             // 扣减分
+      scaffoldCapTriggered    // 是否因抄小抄被压制
     },
-    title: endingMeta.title,
-    storyText: endingMeta.storyText
+    title: scaffoldCapTriggered ? '【达成及格 · 照本宣科】标准大床房入住 (2星小抄上限)' : endingMeta.title,
+    storyText: scaffoldCapTriggered
+      ? "Arthur 熟练地在键盘上核对了你的订单，但眼神中带着一丝玩味：'这位客人的用词非常标准，几乎和酒店应急对话手册一模一样。虽然缺少了点即兴发挥的绅士风采，但手续无误。今晚为您安排标准大床房。若想拿到顶层行政套房，下次可得试着脱稿交流。'"
+      : endingMeta.storyText
   };
 }
 
