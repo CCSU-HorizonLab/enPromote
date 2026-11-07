@@ -25,6 +25,37 @@
       </span>
     </section>
 
+    <!-- 六项核心指标放在用户列表前，帮助后台人员快速了解平台整体情况。 -->
+    <section class="overview-section" aria-labelledby="overview-title">
+      <div class="overview-heading">
+        <div>
+          <p class="panel-label">平台数据</p>
+          <h2 id="overview-title">管理概况</h2>
+        </div>
+        <div class="overview-refresh">
+          <span v-if="overview.date" class="overview-date">统计日期：{{ overview.date }}</span>
+          <button class="search-button" type="button" :disabled="overviewLoading" @click="loadOverview">
+            {{ overviewLoading ? '刷新中…' : '刷新统计' }}
+          </button>
+        </div>
+      </div>
+
+      <p v-if="overviewError" class="error-message" role="alert">
+        {{ overviewError }}
+        <button type="button" class="text-button" @click="loadOverview">重试</button>
+      </p>
+
+      <div class="overview-grid" :aria-busy="overviewLoading">
+        <article v-for="metric in overviewMetrics" :key="metric.key" class="overview-card">
+          <span class="overview-label">{{ metric.label }}</span>
+          <strong>
+            {{ overviewError && !overview.date ? '—' : overviewLoading && !overview.date ? '…' : formatNumber(overview[metric.key]) }}
+          </strong>
+          <span class="overview-hint">{{ metric.hint }}</span>
+        </article>
+      </div>
+    </section>
+
     <!-- 用户目录集中展示检索、分页和账号管理入口。 -->
     <section class="users-section" aria-labelledby="users-title">
       <div class="section-heading">
@@ -149,14 +180,35 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { getAdminUser, getAdminUsers, setAdminUserStatus } from '@/api/admin'
-import type { AdminUser, AdminUserStatus } from '@/api/admin'
+import { getAdminOverview, getAdminUser, getAdminUsers, setAdminUserStatus } from '@/api/admin'
+import type { AdminOverview, AdminUser, AdminUserStatus } from '@/api/admin'
 import { user } from '@/stores/userStore'
 
 const pageSize = 20
 // 当前后台账号的显示信息和 ID；currentUserId 用于避免在列表中操作自己。
 const username = user.value?.username || '管理员'
 const currentUserId = user.value?._id
+// 管理概况和用户列表分别加载，单个请求失败时不会影响另一个区域。
+const emptyOverview: AdminOverview = {
+  date: '',
+  totalUsers: 0,
+  activeAccounts: 0,
+  newUsersToday: 0,
+  todayLearners: 0,
+  todayLearnedWords: 0,
+  totalLearnedWords: 0
+}
+const overview = ref<AdminOverview>({ ...emptyOverview })
+const overviewLoading = ref(false)
+const overviewError = ref('')
+const overviewMetrics: { key: keyof Omit<AdminOverview, 'date'>; label: string; hint: string }[] = [
+  { key: 'totalUsers', label: '账号总数', hint: '平台注册账号' },
+  { key: 'activeAccounts', label: '正常账号', hint: '当前可正常使用' },
+  { key: 'newUsersToday', label: '今日新增', hint: '今天注册的账号' },
+  { key: 'todayLearners', label: '今日学习人数', hint: '今天有学习记录的用户' },
+  { key: 'todayLearnedWords', label: '今日学习词数', hint: '学习记录中的今日词数' },
+  { key: 'totalLearnedWords', label: '累计学习词数', hint: '所有用户累计词数' }
+]
 // searchDraft 是输入框内容；search 是实际提交给接口的关键词。
 const searchDraft = ref('')
 const search = ref('')
@@ -174,6 +226,25 @@ function errorText(error: unknown): string {
   const responseMessage = (error as { response?: { data?: { message?: string } } })
     .response?.data?.message
   return responseMessage || '请求失败，请稍后重试'
+}
+
+// 请求服务端计算好的统计结果，并在失败时显示可重试的错误信息。
+async function loadOverview() {
+  overviewLoading.value = true
+  overviewError.value = ''
+  try {
+    const response = await getAdminOverview()
+    overview.value = response.data.data
+  } catch (error) {
+    overviewError.value = errorText(error)
+  } finally {
+    overviewLoading.value = false
+  }
+}
+
+// 使用中文区域格式显示千位分隔符，方便快速阅读较大的统计数值。
+function formatNumber(value: number): string {
+  return value.toLocaleString('zh-CN')
 }
 
 // 根据当前搜索词和页码读取列表，同时接收服务端分页元数据。
@@ -247,6 +318,8 @@ async function toggleStatus(account: AdminUser) {
     const target = users.value.find(item => item._id === account._id)
     if (target) target.status = updatedStatus
     if (selectedUser.value?._id === account._id) selectedUser.value.status = updatedStatus
+    // 状态改变会影响正常账号数，因此同步刷新概况卡片。
+    await loadOverview()
   } catch (error) {
     errorMessage.value = errorText(error)
   } finally {
@@ -268,8 +341,11 @@ function formatDate(value?: string): string {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('zh-CN')
 }
 
-// 组件显示后读取第一页用户数据。
-onMounted(loadUsers)
+// 组件显示后并行加载概况和第一页用户数据。
+onMounted(() => {
+  loadOverview()
+  loadUsers()
+})
 </script>
 
 <style scoped>
@@ -374,6 +450,65 @@ h1 {
   color: #287451;
   font-size: 13px;
   font-weight: 700;
+}
+
+.overview-section {
+  margin: 0 0 36px;
+}
+
+.overview-heading,
+.overview-refresh {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.overview-heading {
+  margin-bottom: 16px;
+}
+
+.overview-heading h2 {
+  margin-top: 7px;
+}
+
+.overview-refresh {
+  flex: 0 0 auto;
+}
+
+.overview-date,
+.overview-hint {
+  color: #78877f;
+  font-size: 12px;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.overview-card {
+  display: grid;
+  min-height: 126px;
+  align-content: space-between;
+  gap: 10px;
+  padding: 18px;
+  border: 1px solid #dce6df;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.overview-label {
+  color: #64776e;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.overview-card strong {
+  color: #205e4d;
+  font-size: 30px;
+  line-height: 1.1;
 }
 
 .section-heading {
@@ -662,9 +797,29 @@ tbody tr:last-child td {
   }
 
   .admin-heading,
-  .section-heading {
+  .section-heading,
+  .overview-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .overview-refresh {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .overview-card {
+    min-height: 112px;
+    padding: 14px;
+  }
+
+  .overview-card strong {
+    font-size: 25px;
   }
 
   h1 {
