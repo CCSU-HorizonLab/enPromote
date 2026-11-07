@@ -18,51 +18,103 @@
     "objectiveDescription": "在系统查无此单且标准间告急的深夜，向严谨苛刻的 Arthur 查实预订，并得体地争取升级为高楼层行政套房。",
     "inventoryWeapons": [
       {
-        "id": "wp_reservation",
-        "phrase": "reservation under",
-        "name": "预订身份语块",
-        "chunk": "reservation under the name of",
-        "intent": "以某人名义的预订",
-        "phase": 1,
-        "fullScaffold": "Good evening, sir. I believe I have a reservation under the name of Alex."
-      },
-      {
-        "id": "wp_confirmation",
-        "phrase": "confirmation number",
-        "name": "确认凭据语块",
-        "chunk": "my confirmation number is",
-        "intent": "出示预订确认号进行核对",
-        "phase": 1,
-        "fullScaffold": "Here is my confirmation number, and here is my passport for verification."
-      },
-      {
-        "id": "wp_passport",
-        "phrase": "passport",
-        "name": "证件出示语块",
-        "chunk": "here is my passport for verification",
-        "intent": "出示护照证件配合实名查验",
-        "phase": 1,
-        "fullScaffold": "Certainly, here is my passport for your verification."
-      },
-      {
-        "id": "wp_upgrade",
-        "phrase": "complimentary upgrade",
-        "name": "高阶谈判语块",
-        "chunk": "wondering if a complimentary upgrade might be available",
-        "intent": "委婉试探升级高楼层或行政套房",
+        "id": "stance_wondering",
+        "category": "pragmatic_stance",
+        "phrase": "I was wondering if",
+        "name": "委婉试探招式",
+        "chunk": "I was wondering if it might be possible to...",
+        "slotFormula": "I was wondering if it might be possible to [点击下方零件或输入诉求]...",
+        "intent": "【通用招式】虚拟语气弱化诉求，消除逼迫感，升房/谈薪/议价万能句",
         "phase": 2,
-        "fullScaffold": "Given the late hour and the system inconvenience, I was wondering if a complimentary upgrade might be available tonight?"
+        "fullScaffold": "Given the inconvenience, I was wondering if it might be possible to arrange a complimentary upgrade?"
       },
       {
-        "id": "wp_deposit",
-        "phrase": "deposit refundable",
-        "name": "押金政策语块",
-        "chunk": "confirm if the security deposit is fully refundable",
-        "intent": "确认预授权押金是否全额原路退还",
+        "id": "stance_confirm",
+        "category": "pragmatic_stance",
+        "phrase": "Could you kindly confirm",
+        "name": "商量核实招式",
+        "chunk": "Could you kindly confirm if...",
+        "slotFormula": "Could you kindly confirm if [点击下方零件或输入核对事项]...",
+        "intent": "【通用招式】以彬彬有礼的商量口吻核实条款，避免质问感",
         "phase": 2,
         "fullScaffold": "Could you also kindly confirm if the security deposit is fully refundable upon check-out?"
+      },
+      {
+        "id": "stance_verification",
+        "category": "pragmatic_stance",
+        "phrase": "for your verification",
+        "name": "主动配合招式",
+        "chunk": "here is my... for your verification",
+        "slotFormula": "Here is my passport and confirmation for your verification: [点击下方零件或输入信息]...",
+        "intent": "【通用招式】主动出示凭据配合对方规程，迅速建立职业信任",
+        "phase": 1,
+        "fullScaffold": "Certainly, here is my passport and confirmation number for your verification."
+      },
+      {
+        "id": "chunk_reservation",
+        "category": "domain_chunk",
+        "phrase": "reservation under",
+        "name": "预订归属零件",
+        "chunk": "reservation under the name of [Name]",
+        "slotFormula": "I have a reservation under the name of [Alex].",
+        "intent": "【业务零件】酒店专有事实：声明订单归属人姓名",
+        "phase": 1,
+        "fullScaffold": "Good evening, sir. I have a reservation under the name of Alex."
+      },
+      {
+        "id": "chunk_confirmation",
+        "category": "domain_chunk",
+        "phrase": "confirmation number",
+        "name": "订单凭据零件",
+        "chunk": "my confirmation number is [Number]",
+        "slotFormula": "My booking confirmation number is [LON-88219].",
+        "intent": "【业务零件】酒店专有事实：提供预订流水确认号",
+        "phase": 1,
+        "fullScaffold": "My confirmation number is LON-88219."
+      },
+      {
+        "id": "chunk_upgrade",
+        "category": "domain_chunk",
+        "phrase": "complimentary upgrade",
+        "name": "免费升房零件",
+        "chunk": "a complimentary upgrade",
+        "slotFormula": "Would a complimentary room upgrade be available tonight?",
+        "intent": "【业务零件】酒店专有术语：不加收房费的礼遇升级",
+        "phase": 2,
+        "fullScaffold": "I was wondering if a complimentary upgrade might be available tonight?"
+      },
+      {
+        "id": "chunk_deposit",
+        "category": "domain_chunk",
+        "phrase": "deposit refundable",
+        "name": "押金政策零件",
+        "chunk": "the security deposit is fully refundable",
+        "slotFormula": "Is the security deposit fully refundable upon check-out?",
+        "intent": "【业务零件】酒店专有事实：确认预授权押金是否全额原路退还",
+        "phase": 2,
+        "fullScaffold": "Could you kindly confirm if the security deposit is fully refundable upon check-out?"
       }
     ],
+    "smartSnapMatrix": {
+      "stance_wondering": {
+        "chunk_reservation": "Good evening. I was wondering if you could check if there is a reservation under the name of [Alex]?",
+        "chunk_confirmation": "I was wondering if you could track down the reservation using my confirmation number [LON-88219]?",
+        "chunk_upgrade": "Given the inconvenience, I was wondering if it might be possible to arrange a complimentary upgrade for our stay?",
+        "chunk_deposit": "I was wondering if you could clarify whether the security deposit is fully refundable upon check-out?"
+      },
+      "stance_confirm": {
+        "chunk_reservation": "Could you kindly confirm if you have my reservation under the name of [Alex]?",
+        "chunk_confirmation": "Could you kindly confirm the reservation details with confirmation number [LON-88219]?",
+        "chunk_upgrade": "Could you kindly confirm if any complimentary room upgrades might be available tonight?",
+        "chunk_deposit": "Could you kindly confirm if the security deposit is fully refundable upon check-out?"
+      },
+      "stance_verification": {
+        "chunk_reservation": "Good evening. Here is my ID for your verification; I have a reservation under the name of [Alex].",
+        "chunk_confirmation": "Certainly, here is my confirmation number [LON-88219] and passport for your verification.",
+        "chunk_upgrade": "Here is my passport for your verification; also, given the delay, could we explore a complimentary upgrade?",
+        "chunk_deposit": "Here is my credit card for your verification; could you confirm if the deposit is refundable?"
+      }
+    },
     "climaxThresholdRound": 2,
     "endings": {
       "critical_success": {

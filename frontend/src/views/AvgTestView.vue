@@ -90,9 +90,13 @@
               <span class="r-dot">{{ factsVerified.includes('hasProofProvided') ? '✅' : '⚪' }}</span>
               <span class="r-text">凭证/护照出示 (+20)</span>
             </div>
-            <div class="rubric-item" :class="{ achieved: weaponsHit.length >= 1 }">
-              <span class="r-dot">{{ weaponsHit.length >= 1 ? '🎯' : '⚪' }}</span>
-              <span class="r-text">高级词块命中 ({{ Math.min(30, weaponsHit.length * 10) }}/30)</span>
+            <div class="rubric-item" :class="{ achieved: stancesHitCount >= 1 }">
+              <span class="r-dot">{{ stancesHitCount >= 1 ? '🛡️' : '⚪' }}</span>
+              <span class="r-text">社交润滑招式 (How: {{ Math.min(15, stancesHitCount * 8) }}/15)</span>
+            </div>
+            <div class="rubric-item" :class="{ achieved: domainChunksHitCount >= 1 }">
+              <span class="r-dot">{{ domainChunksHitCount >= 1 ? '📦' : '⚪' }}</span>
+              <span class="r-text">业务事实零件 (What: {{ Math.min(15, domainChunksHitCount * 8) }}/15)</span>
             </div>
           </div>
         </div>
@@ -212,15 +216,19 @@
               <div class="breakdown-title">📊 社交天平实战得分账本 (100% 实力归因)</div>
               <div class="breakdown-grid">
                 <div class="b-row">
-                  <span>事实信息核验：</span>
+                  <span>事实信息核验 (姓名/凭证)：</span>
                   <strong>+{{ settlementData.scoreBreakdown.factClarityScore }} 分</strong>
                 </div>
-                <div class="b-row">
-                  <span>高级场景词块：</span>
-                  <strong>+{{ settlementData.scoreBreakdown.targetChunksScore }} 分</strong>
+                <div class="b-row highlight-stance-row">
+                  <span>🛡️ 社交润滑招式 (How · 委婉商量语气)：</span>
+                  <strong class="color-stance">+{{ settlementData.scoreBreakdown.pragmaticStanceScore ?? 15 }} 分</strong>
+                </div>
+                <div class="b-row highlight-chunk-row">
+                  <span>📦 场景业务零件 (What · 酒店事实短语)：</span>
+                  <strong class="color-chunk">+{{ settlementData.scoreBreakdown.domainChunksScore ?? 15 }} 分</strong>
                 </div>
                 <div class="b-row">
-                  <span>英伦绅士礼仪：</span>
+                  <span>英伦绅士礼仪 (LLM 得体度判定)：</span>
                   <strong>+{{ settlementData.scoreBreakdown.toneScore }} 分</strong>
                 </div>
                 <div class="b-row penalty-row" v-if="settlementData.scoreBreakdown.deductions > 0">
@@ -263,57 +271,110 @@
           </div>
         </div>
 
-        <!-- 战术语块匣 (Tactical Chunk Deck: 拒绝无脑整句填入，给零件让玩家自己拼) -->
-        <div class="weapons-bar" v-if="!isCompleted">
+        <!-- 战术语块匣 (Tactical Deck: 高度紧凑单排 + 分类标签切换 + 可一键折叠) -->
+        <div class="weapons-bar" :class="{ 'deck-collapsed': isDeckCollapsed }" v-if="!isCompleted">
           <div class="weapons-header">
-            <div class="wh-titles">
-              <span class="wh-title">🧩 战术语块匣 (Tactical Chunk Deck)</span>
-              <span class="wh-sub">点击【+ 装配语块】填入核心短语，需自行补充完整主谓与敬语；脱稿完成冲击 3 星顶级套房！</span>
+            <div class="wh-left-controls">
+              <span class="wh-title">🧩 战术装配</span>
+              <!-- 紧凑切换分类 Tabs -->
+              <div class="deck-tabs">
+                <button
+                  class="deck-tab-btn"
+                  :class="{ active: activeDeckTab === 'stances' }"
+                  @click="activeDeckTab = 'stances'"
+                >
+                  🛡️ 社交招式 ({{ pragmaticStances.length }})
+                </button>
+                <button
+                  class="deck-tab-btn"
+                  :class="{ active: activeDeckTab === 'chunks' }"
+                  @click="activeDeckTab = 'chunks'"
+                >
+                  📦 业务零件 ({{ domainChunks.length }})
+                </button>
+                <button
+                  class="deck-tab-btn"
+                  :class="{ active: activeDeckTab === 'all' }"
+                  @click="activeDeckTab = 'all'"
+                >
+                  全部 ({{ scenarioData.inventoryWeapons.length }})
+                </button>
+              </div>
             </div>
-            <div class="wh-mode-indicator">
-              <span v-if="usedFullScaffold" class="badge-mode-cheat">⚠️ 小抄保底中 (封顶2星)</span>
-              <span v-else class="badge-mode-pro">🏆 脱稿组装 (冲刺3星)</span>
+
+            <!-- 中间极简心法 / 当前组装状态 -->
+            <div class="mini-formula-bar" :class="{ 'formula-active': selectedStance || selectedChunk }">
+              <template v-if="selectedStance || selectedChunk">
+                <span class="mf-status-tag">⚡ 磁吸装配:</span>
+                <span v-if="selectedStance" class="mf-item mf-stance">{{ selectedStance.name }}</span>
+                <span v-else class="mf-placeholder">[待选招式 How]</span>
+                <span class="mf-op">+</span>
+                <span v-if="selectedChunk" class="mf-item mf-chunk">{{ selectedChunk.name }}</span>
+                <span v-else class="mf-placeholder">[待选零件 What]</span>
+                <button class="btn-clear-combo" @click.stop="clearSelection" title="重置组装">✕</button>
+              </template>
+              <template v-else>
+                <span class="mf-item mf-stance">🛡️ 招式 How</span>
+                <span class="mf-op">+</span>
+                <span class="mf-item mf-chunk">📦 零件 What</span>
+                <span class="mf-op">=</span>
+                <span class="mf-item mf-result">✨ 100% 得体</span>
+              </template>
+            </div>
+
+            <div class="wh-right-controls">
+              <span v-if="usedFullScaffold" class="badge-mode-cheat">⚠️ 小抄限2星</span>
+              <span v-else class="badge-mode-pro">🏆 脱稿冲3星</span>
+              <button
+                class="btn-toggle-deck"
+                @click="isDeckCollapsed = !isDeckCollapsed"
+                :title="isDeckCollapsed ? '展开装配坞' : '收起装配坞'"
+              >
+                {{ isDeckCollapsed ? '▴ 展开' : '▾ 收起' }}
+              </button>
             </div>
           </div>
 
-          <div class="weapon-chips">
-            <div
-              v-for="w in scenarioData.inventoryWeapons"
-              :key="w.id || w.phrase"
-              class="weapon-card"
-              :class="{
-                hit: weaponsHit.includes(w.phrase),
-                locked: w.phase === 2 && pacingInfo.phase === 'phase1'
-              }"
-            >
-              <div class="wc-top">
-                <div class="wc-name-row">
-                  <span class="wc-phase-tag" :class="`phase-${w.phase}`">P{{ w.phase }}</span>
-                  <strong class="wc-name">{{ w.name || w.phrase }}</strong>
+          <!-- 单排水平紧凑滚动容器 (仅在展开时显示) -->
+          <div class="compact-deck-body" v-show="!isDeckCollapsed">
+            <div class="weapon-chips">
+              <div
+                v-for="w in displayedWeapons"
+                :key="w.id"
+                class="compact-weapon-card"
+                :class="[
+                  w.category === 'pragmatic_stance' ? 'card-stance' : 'card-chunk',
+                  {
+                    hit: weaponsHit.includes(w.phrase),
+                    locked: w.phase === 2 && pacingInfo.phase === 'phase1',
+                    'selected-card-stance': selectedStance?.id === w.id,
+                    'selected-card-chunk': selectedChunk?.id === w.id
+                  }
+                ]"
+                @click="handleInsertChunk(w)"
+              >
+                <div class="cwc-top">
+                  <span class="cwc-tag" :class="w.category === 'pragmatic_stance' ? 'tag-stance' : 'tag-domain'">
+                    {{ w.category === 'pragmatic_stance' ? '🛡️ 招式' : '📦 零件' }}
+                  </span>
+                  <strong class="cwc-name">{{ w.name }}</strong>
+                  <span v-if="weaponsHit.includes(w.phrase)" class="cwc-hit">🎯 已用</span>
+                  <span v-else-if="w.phase === 2 && pacingInfo.phase === 'phase1'" class="cwc-lock">🔒 P2</span>
+                  <button
+                    class="btn-mini-peek"
+                    @click.stop="handleOpenPeek(w)"
+                    title="偷看整句示范"
+                  >
+                    👀
+                  </button>
                 </div>
-                <span v-if="weaponsHit.includes(w.phrase)" class="tag-used">🎯 已命中</span>
-                <span v-else-if="w.phase === 2 && pacingInfo.phase === 'phase1'" class="tag-lock">🔒 阶段二解锁</span>
-              </div>
-              <div class="wc-intent">{{ w.intent || w.meaning }}</div>
-              <div class="wc-chunk">
-                <code>{{ w.chunk || w.phrase }}</code>
-              </div>
-              <div class="wc-actions">
-                <button
-                  class="btn-insert-chunk"
-                  :disabled="w.phase === 2 && pacingInfo.phase === 'phase1'"
-                  @click="handleInsertChunk(w)"
-                  title="装配语块（不会触发小抄惩罚）"
-                >
-                  🧩 + 装配语块
-                </button>
-                <button
-                  class="btn-peek-full"
-                  @click="handleOpenPeek(w)"
-                  title="偷看整句示范（若一键抄入将锁定2星上限）"
-                >
-                  👀 偷看整句
-                </button>
+                <div class="cwc-chunk">
+                  <code>{{ w.chunk }}</code>
+                </div>
+                <div class="cwc-intent-row">
+                  <span class="cwc-intent">{{ w.intent }}</span>
+                  <span class="cwc-action-hint">{{ (selectedStance?.id === w.id || selectedChunk?.id === w.id) ? '✓ 已装配' : '+ 磁吸' }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -322,6 +383,11 @@
         <!-- 输入交互栏 -->
         <div class="input-panel">
           <template v-if="!isCompleted">
+            <!-- 乐高智能磁吸成功提示 -->
+            <div v-if="isSmartSnapped" class="smart-snap-bar">
+              <span class="ssb-badge">⚡ 乐高智能磁吸已就绪</span>
+              <span class="ssb-text">已为您自动补齐地道语法胶水。可修改 <code>[Alex]</code> 等括号参数，或直接点击发送！</span>
+            </div>
             <!-- 状态提示浮条 -->
             <div v-if="usedFullScaffold" class="scaffold-warning-bar">
               <span>⚠️ 本局已启用全句小抄保底：终局结算将封顶在 2 星（及格标准大床房），无法获得 3 星顶层行政套房。</span>
@@ -544,18 +610,111 @@ async function scrollToBottom() {
   }
 }
 
-// 战术语块点击：仅装配核心语块到输入框，不喂完整句子，强迫大脑主动造句
+// 拆分通用社交招式 (How) 与 场景业务事实零件 (What)
+const pragmaticStances = computed(() => {
+  return (scenarioData.value?.inventoryWeapons || []).filter((w: any) => w.category === 'pragmatic_stance');
+});
+
+const domainChunks = computed(() => {
+  return (scenarioData.value?.inventoryWeapons || []).filter((w: any) => w.category !== 'pragmatic_stance');
+});
+
+const stancesHitCount = computed(() => {
+  const stancePhrases = new Set(pragmaticStances.value.map((w: any) => w.phrase.toLowerCase().trim()));
+  return weaponsHit.value.filter((p: string) => stancePhrases.has(p.toLowerCase().trim())).length;
+});
+
+const domainChunksHitCount = computed(() => {
+  const chunkPhrases = new Set(domainChunks.value.map((w: any) => w.phrase.toLowerCase().trim()));
+  return weaponsHit.value.filter((p: string) => chunkPhrases.has(p.toLowerCase().trim())).length;
+});
+
+// 紧凑装配坞折叠、分类 Tab 与乐高智能磁吸状态
+const isDeckCollapsed = ref(false);
+const activeDeckTab = ref<'stances' | 'chunks' | 'all'>('stances');
+const selectedStance = ref<any | null>(null);
+const selectedChunk = ref<any | null>(null);
+const isSmartSnapped = ref(false);
+
+const displayedWeapons = computed(() => {
+  if (activeDeckTab.value === 'stances') return pragmaticStances.value;
+  if (activeDeckTab.value === 'chunks') return domainChunks.value;
+  return scenarioData.value?.inventoryWeapons || [];
+});
+
+function clearSelection() {
+  selectedStance.value = null;
+  selectedChunk.value = null;
+  isSmartSnapped.value = false;
+  userInput.value = '';
+  showToast('↺ 已重置装配台，输入框已清空');
+}
+
+// 乐高智能磁吸装配：点击招式与零件自动补齐语法胶水，消除机械剪辑疲劳，保留参数微调槽位
 function handleInsertChunk(w: any) {
   if (isCompleted.value) return;
-  const chunkText = w.chunk || w.phrase;
-  if (!userInput.value.includes(chunkText)) {
-    if (!userInput.value.trim()) {
-      userInput.value = chunkText;
+
+  const matrix = scenarioData.value?.smartSnapMatrix || {};
+
+  if (w.category === 'pragmatic_stance') {
+    // 点击社交招式卡
+    if (selectedStance.value?.id === w.id) {
+      // 再次点击取消当前招式
+      selectedStance.value = null;
+      if (selectedChunk.value) {
+        userInput.value = selectedChunk.value.slotFormula || selectedChunk.value.chunk;
+        isSmartSnapped.value = false;
+      } else {
+        userInput.value = '';
+      }
+      return;
+    }
+
+    selectedStance.value = w;
+
+    // 若当前已有就绪的业务零件 -> 瞬间触发智能磁吸合体！
+    if (selectedChunk.value && matrix[w.id]?.[selectedChunk.value.id]) {
+      userInput.value = matrix[w.id][selectedChunk.value.id];
+      isSmartSnapped.value = true;
+      showToast(`⚡ 乐高磁吸成功：【${w.name}】+【${selectedChunk.value.name}】！语法胶水已自动补全，可微调括号内容直接发送！`);
     } else {
-      userInput.value = `${userInput.value.trim()} ${chunkText}`;
+      userInput.value = w.slotFormula || w.chunk || w.phrase;
+      isSmartSnapped.value = false;
+      showToast(`🛡️ 社交招式【${w.name}】已就位！请点击右侧【📦 业务零件】完成智能合体！`);
+    }
+  } else {
+    // 点击业务零件卡
+    if (selectedChunk.value?.id === w.id) {
+      // 再次点击取消当前零件
+      selectedChunk.value = null;
+      if (selectedStance.value) {
+        userInput.value = selectedStance.value.slotFormula || selectedStance.value.chunk;
+        isSmartSnapped.value = false;
+      } else {
+        userInput.value = '';
+      }
+      return;
+    }
+
+    selectedChunk.value = w;
+
+    // 若当前已有就绪的社交招式 -> 瞬间触发智能磁吸合体！
+    if (selectedStance.value && matrix[selectedStance.value.id]?.[w.id]) {
+      userInput.value = matrix[selectedStance.value.id][w.id];
+      isSmartSnapped.value = true;
+      showToast(`⚡ 乐高磁吸成功：【${selectedStance.value.name}】+【${w.name}】！语法胶水已自动补全，可微调括号内容直接发送！`);
+    } else {
+      userInput.value = w.slotFormula || w.chunk || w.phrase;
+      isSmartSnapped.value = false;
+      showToast(`📦 业务零件【${w.name}】已就位！点击左侧【🛡️ 社交招式】可强化礼貌度与好感！`);
     }
   }
-  showToast(`🧩 已装配核心语块【${chunkText}】，请自行补充主谓语与敬词！`);
+
+  // 战术策略预警：若在 Phase 1 选择了升房零件，给予即时策略预警（提示动脑，防无脑点）
+  if (w.id === 'chunk_upgrade' && pacingInfo.value.phase === 'phase1') {
+    showToast('⚠️ 策略警示：Arthur 正在查验身份（Phase 1），此时索要升房会被判定操之过急并扣分！建议先报出姓名与订单号。');
+  }
+
   nextTick(() => {
     textareaRef.value?.focus();
   });
@@ -624,6 +783,9 @@ async function sendMessage() {
   if (!text || loading.value || isCompleted.value) return;
 
   userInput.value = '';
+  selectedStance.value = null;
+  selectedChunk.value = null;
+  isSmartSnapped.value = false;
   messages.value.push({ role: 'user', content: text });
   loading.value = true;
   await scrollToBottom();
@@ -714,6 +876,9 @@ async function resetSession() {
       body: JSON.stringify({ sessionId: 'default' })
     });
     userInput.value = '';
+    selectedStance.value = null;
+    selectedChunk.value = null;
+    isSmartSnapped.value = false;
     messages.value = [];
     currentEmotion.value = 'neutral';
     isCompleted.value = false;
@@ -1035,8 +1200,11 @@ onMounted(() => {
 .stage-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  height: calc(100vh - 100px);
+  gap: 10px;
+  height: calc(100vh - 90px);
+  min-height: 540px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .objective-banner {
@@ -1084,10 +1252,11 @@ onMounted(() => {
 /* 对话视窗 */
 .chat-viewport {
   flex: 1;
+  min-height: 0;
   background: #0f172a;
   border: 1px solid #1e293b;
   border-radius: 12px;
-  padding: 20px;
+  padding: 16px 20px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -1271,6 +1440,22 @@ onMounted(() => {
 .color-warning {
   color: #f59e0b;
 }
+.highlight-stance-row {
+  background: rgba(245, 158, 11, 0.08);
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+.color-stance {
+  color: #fbbf24;
+}
+.highlight-chunk-row {
+  background: rgba(56, 189, 248, 0.08);
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+.color-chunk {
+  color: #38bdf8;
+}
 .b-row.total-row {
   border-top: 1px dashed #334155;
   padding-top: 6px;
@@ -1343,200 +1528,356 @@ onMounted(() => {
   cursor: default;
 }
 
-/* 战术语块匣 (Tactical Chunk Deck) */
+/* 战术装配坞 (Tactical Chunk Dock: 极紧凑单排 + 分类Tab + 折叠) */
 .weapons-bar {
+  flex-shrink: 0;
   background: #0d1527;
   border: 1px solid #1e2d4d;
-  border-radius: 12px;
-  padding: 12px 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  border-radius: 10px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+}
+.weapons-bar.deck-collapsed {
+  padding: 6px 12px;
 }
 .weapons-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 8px;
 }
-.wh-titles {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.wh-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: #f8fafc;
+.wh-left-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
 }
-.wh-sub {
+.wh-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: #f8fafc;
+  white-space: nowrap;
+}
+.deck-tabs {
+  display: flex;
+  gap: 4px;
+  background: #090e1a;
+  padding: 2px;
+  border-radius: 6px;
+  border: 1px solid #1e293b;
+}
+.deck-tab-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
   font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.deck-tab-btn:hover {
+  color: #f8fafc;
+}
+.deck-tab-btn.active {
+  background: #1e293b;
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+/* 中间极简心法提示 */
+.mini-formula-bar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(56, 189, 248, 0.15);
+  border-radius: 5px;
+  padding: 2px 8px;
+  transition: all 0.2s ease;
+}
+.mini-formula-bar.formula-active {
+  background: rgba(30, 58, 95, 0.8);
+  border-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+}
+.mf-status-tag {
+  color: #38bdf8;
+  font-weight: 800;
+  font-size: 10px;
+}
+.mf-placeholder {
   color: #64748b;
+  font-size: 10px;
+  font-style: italic;
+}
+.btn-clear-combo {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 2px 0 6px;
+  line-height: 1;
+}
+.btn-clear-combo:hover {
+  color: #ef4444;
+}
+.mf-item {
+  font-weight: 700;
+}
+.mf-stance { color: #fbbf24; }
+.mf-chunk { color: #38bdf8; }
+.mf-op { color: #64748b; font-weight: 800; }
+.mf-result { color: #34d399; }
+
+.wh-right-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .badge-mode-cheat {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   color: #f59e0b;
   background: rgba(245, 158, 11, 0.12);
   border: 1px solid rgba(245, 158, 11, 0.35);
-  padding: 3px 8px;
-  border-radius: 20px;
+  padding: 2px 6px;
+  border-radius: 12px;
 }
 .badge-mode-pro {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   color: #10b981;
   background: rgba(16, 185, 129, 0.12);
   border: 1px solid rgba(16, 185, 129, 0.35);
+  padding: 2px 6px;
+  border-radius: 12px;
+}
+.btn-toggle-deck {
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #cbd5e1;
+  font-size: 10px;
+  font-weight: 700;
   padding: 3px 8px;
-  border-radius: 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.btn-toggle-deck:hover {
+  background: #334155;
+  color: #f8fafc;
 }
 
-/* 语块卡片网格 */
+/* 单排紧凑语块卡片容器 */
+.compact-deck-body {
+  margin-top: 6px;
+}
 .weapon-chips {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   overflow-x: auto;
-  padding-bottom: 6px;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
 }
-.weapon-card {
-  min-width: 220px;
-  max-width: 260px;
+.compact-weapon-card {
+  min-width: 200px;
+  max-width: 240px;
   flex-shrink: 0;
   background: #111b33;
   border: 1px solid #233457;
-  border-radius: 8px;
-  padding: 10px 12px;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 8px;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  gap: 4px;
+  transition: all 0.15s ease;
 }
-.weapon-card:hover:not(.locked) {
+.compact-weapon-card.card-stance {
+  border-left: 3px solid #f59e0b;
+  background: #151828;
+}
+.compact-weapon-card.card-stance:hover:not(.locked) {
+  border-color: #f59e0b;
+  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.2);
+  transform: translateY(-1px);
+}
+.compact-weapon-card.card-chunk {
+  border-left: 3px solid #0284c7;
+  background: #0f1a2d;
+}
+.compact-weapon-card.card-chunk:hover:not(.locked) {
   border-color: #38bdf8;
-  background: #162445;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.15);
+  box-shadow: 0 2px 10px rgba(56, 189, 248, 0.2);
+  transform: translateY(-1px);
 }
-.weapon-card.hit {
+.compact-weapon-card.hit {
   border-color: #10b981;
   background: rgba(16, 185, 129, 0.08);
 }
-.weapon-card.locked {
-  opacity: 0.55;
+.compact-weapon-card.locked {
+  opacity: 0.5;
   filter: grayscale(0.5);
   cursor: not-allowed;
 }
-
-.wc-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.compact-weapon-card.selected-card-stance {
+  border-color: #f59e0b !important;
+  background: rgba(245, 158, 11, 0.18) !important;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.4) !important;
+  transform: translateY(-2px);
 }
-.wc-name-row {
+.compact-weapon-card.selected-card-chunk {
+  border-color: #38bdf8 !important;
+  background: rgba(56, 189, 248, 0.18) !important;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.4) !important;
+  transform: translateY(-2px);
+}
+
+.cwc-top {
   display: flex;
   align-items: center;
   gap: 6px;
 }
-.wc-phase-tag {
+.cwc-tag {
   font-size: 9px;
   font-weight: 800;
-  padding: 1px 5px;
+  padding: 1px 4px;
   border-radius: 3px;
+  white-space: nowrap;
 }
-.wc-phase-tag.phase-1 {
-  background: #1e3a5f;
-  color: #38bdf8;
-}
-.wc-phase-tag.phase-2 {
-  background: #4a2800;
+.tag-stance {
+  background: rgba(245, 158, 11, 0.2);
   color: #fbbf24;
 }
-.wc-name {
-  font-size: 12px;
+.tag-domain {
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+}
+.cwc-name {
+  font-size: 11px;
   color: #f1f5f9;
   font-weight: 700;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.tag-used {
-  font-size: 10px;
+.cwc-hit {
+  font-size: 9px;
   background: #065f46;
   color: #34d399;
-  padding: 1px 6px;
-  border-radius: 4px;
-  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 700;
+  white-space: nowrap;
 }
-.tag-lock {
-  font-size: 10px;
+.cwc-lock {
+  font-size: 9px;
   background: #334155;
   color: #94a3b8;
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.btn-mini-peek {
+  background: transparent;
+  border: none;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  opacity: 0.75;
+  transition: opacity 0.15s;
+}
+.btn-mini-peek:hover {
+  opacity: 1;
+  transform: scale(1.15);
 }
 
-.wc-intent {
-  font-size: 11px;
-  color: #94a3b8;
-  line-height: 1.3;
-}
-.wc-chunk {
+.cwc-chunk {
   background: #090e1a;
   border: 1px solid #1e293b;
   border-radius: 4px;
-  padding: 5px 8px;
+  padding: 3px 6px;
 }
-.wc-chunk code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 11px;
+.cwc-chunk code {
   color: #38bdf8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10.5px;
   word-break: break-all;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+.card-stance .cwc-chunk code {
+  color: #fbbf24;
 }
 
-.wc-actions {
+.cwc-intent-row {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: 6px;
-  margin-top: 4px;
 }
-.btn-insert-chunk {
-  flex: 1;
-  background: #0284c7;
-  color: #ffffff;
-  border: none;
-  border-radius: 5px;
-  padding: 5px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.btn-insert-chunk:hover:not(:disabled) {
-  background: #0369a1;
-}
-.btn-insert-chunk:disabled {
-  background: #334155;
-  cursor: not-allowed;
-}
-.btn-peek-full {
-  background: transparent;
+.cwc-intent {
+  font-size: 10px;
   color: #94a3b8;
-  border: 1px solid #334155;
-  border-radius: 5px;
-  padding: 5px 8px;
-  font-size: 11px;
-  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  transition: all 0.15s;
+  flex: 1;
 }
-.btn-peek-full:hover {
-  background: #1e293b;
-  color: #f8fafc;
-  border-color: #64748b;
+.cwc-action-hint {
+  font-size: 9px;
+  color: #64748b;
+  font-weight: 700;
+}
+.compact-weapon-card:hover .cwc-action-hint {
+  color: #38bdf8;
+}
+.compact-weapon-card.card-stance:hover .cwc-action-hint {
+  color: #fbbf24;
 }
 
 /* 输入控制栏小抄警示与提示条 */
+.smart-snap-bar {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: #34d399;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  animation: fadeInToast 0.25s ease-out;
+}
+.ssb-badge {
+  font-weight: 800;
+  background: rgba(16, 185, 129, 0.25);
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.ssb-text {
+  color: #a7f3d0;
+  flex: 1;
+}
+.ssb-text code {
+  color: #fef08a;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 700;
+}
 .scaffold-warning-bar {
   background: rgba(245, 158, 11, 0.12);
   border: 1px solid rgba(245, 158, 11, 0.35);
@@ -1722,10 +2063,11 @@ onMounted(() => {
 
 /* 输入控制栏 */
 .input-panel {
+  flex-shrink: 0;
   background: #0f172a;
   border: 1px solid #1e293b;
   border-radius: 10px;
-  padding: 12px;
+  padding: 10px 14px;
 }
 .input-row {
   display: flex;
@@ -1733,12 +2075,16 @@ onMounted(() => {
 }
 .input-row textarea {
   flex: 1;
+  height: 58px;
+  min-height: 50px;
+  max-height: 76px;
   background: #090e17;
   border: 1px solid #334155;
   border-radius: 8px;
-  padding: 10px 14px;
+  padding: 8px 12px;
   color: #f8fafc;
-  font-size: 14px;
+  font-size: 13.5px;
+  line-height: 1.4;
   resize: none;
 }
 .input-row textarea:focus {

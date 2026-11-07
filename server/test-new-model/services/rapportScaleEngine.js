@@ -83,8 +83,23 @@ function evaluateRapportSettlement({
   if (factsVerified.has('hasNameStated')) factClarityScore += 20;
   if (factsVerified.has('hasProofProvided')) factClarityScore += 20;
 
-  // 2. 核心词块得分 (0 ~ 30, 每个 +10，封顶 30)
-  const targetChunksScore = Math.min(30, allWeaponsHit.size * 10);
+  // 2. 双轨语块拆解得分 (通用社交招式 How vs 场景业务零件 What, 各封顶 15, 合计封顶 30)
+  const weaponsMap = new Map((scenario.inventoryWeapons || []).map(w => [w.phrase.toLowerCase().trim(), w]));
+  let stancesHitCount = 0;
+  let domainChunksHitCount = 0;
+
+  allWeaponsHit.forEach(phrase => {
+    const w = weaponsMap.get(phrase.toLowerCase().trim());
+    if (w?.category === 'pragmatic_stance') {
+      stancesHitCount++;
+    } else {
+      domainChunksHitCount++;
+    }
+  });
+
+  const pragmaticStanceScore = Math.min(15, stancesHitCount * 8);
+  const domainChunksScore = Math.min(15, domainChunksHitCount * 8);
+  const targetChunksScore = Math.min(30, pragmaticStanceScore + domainChunksScore);
 
   // 3. 礼貌得体度得分 (0 ~ 30)
   const toneScore = Math.max(0, Math.min(30, Math.round(avgToneScore)));
@@ -130,7 +145,9 @@ function evaluateRapportSettlement({
     usedFullScaffold,
     scoreBreakdown: {
       factClarityScore,       // 0 ~ 40 (身份与证据)
-      targetChunksScore,      // 0 ~ 30 (高级场景词块)
+      pragmaticStanceScore,   // 0 ~ 15 (通用社交润滑招式 How)
+      domainChunksScore,      // 0 ~ 15 (场景业务事实零件 What)
+      targetChunksScore,      // 0 ~ 30 (高级场景词块总计)
       toneScore,              // 0 ~ 30 (英伦礼貌与风度)
       deductions,             // 扣减分
       scaffoldCapTriggered    // 是否因抄小抄被压制

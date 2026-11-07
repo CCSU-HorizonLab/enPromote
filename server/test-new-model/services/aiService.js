@@ -67,10 +67,13 @@ ${weaponsList}
 [Instructions]:
 1. Roleplay as ${npc.name}. Respond strictly in authentic, spoken English matching your British gentleman or busy barista personality (1-3 natural sentences).
 2. Choose one emotion tag from: ["neutral", "skeptical", "annoyed", "pleased"].
-3. Evaluate the player's English tone and politeness:
-   - toneScore: 0 to 30 (30 = exceptional British/formal etiquette using modal verbs like 'Could I', 'I was wondering if'; 15 = acceptable normal speech; < 10 = rude imperative commands like 'Give me room', 'I want', or aggressive pushiness).
-   - toneFeedback: Short Chinese feedback (e.g. "用语得体，体现绅士修养" or "语气生硬，缺乏必要礼貌敬语").
-   - dynamicTag: A punchy 2-4 word gamer tag with an emoji (e.g. "🎩 优雅得体", "⚡ 证据确凿", "⚠️ 操之过急", "🧊 略显生硬").
+3. Evaluate the player's English tone, politeness, and especially PRAGMATIC SOFTENERS (语用润滑剂):
+   - toneScore: 0 to 30:
+     * High (25-30): Mastered high-EQ universal softeners like 'I was wondering if it might be possible...', 'Could you kindly confirm...', 'for your verification'.
+     * Moderate (15-24): Standard polite speech ('Please check', 'Could you help me').
+     * Low (< 15): Blunt, demanding, caveman imperatives ('Give me room', 'I want', 'Hurry up').
+   - toneFeedback: Short Chinese feedback highlighting pragmatic stance (e.g. "巧妙运用 'I was wondering if' 委婉试探，毫无命令压迫感" or "语气直白生硬，缺乏成年人社交必要的情态缓冲").
+   - dynamicTag: A punchy 2-4 word gamer tag with an emoji (e.g. "🎩 高情商委婉", "⚡ 证据确凿", "⚠️ 缺乏敬语", "🧊 命令语气").
    - antiOtkTriggered: boolean (true ONLY IF player asks for complimentary upgrade prematurely in Phase 1 before identifying booking or name).
 `;
 
@@ -130,8 +133,9 @@ ${settlement.title}: ${settlement.storyText}
    - If 2 stars (success): Arthur briskly and professionally assigns a comfortable standard room on a quiet floor.
    - If 1 star (fail_forward): Arthur sighs, assigns a noisy emergency single room near the elevator bank.
 2. Produce ONE high-yield golden takeaway sentence (单句破局金句):
-   - nativeSentence: The single most useful native sentence to master for luxury hotel check-ins (e.g. "I was wondering if you might have any complimentary upgrades available tonight?").
-   - usageNote: 1-2 sentence Chinese explanation of why this functional chunk works so well.
+   - nativeSentence: Must emphasize the UNIVERSAL PRAGMATIC SOFTENER pattern combined with domain chunks (e.g. "I was wondering if it might be possible to arrange a complimentary upgrade tonight?").
+   - usageNote: 2-3 sentence Chinese explanation emphasizing that this is a LIFELONG UNIVERSAL STANCE:
+     "【I was wondering if it might be possible to...】是英语母语者社交中的高情商神级句型。通过过去进行时将诉求虚拟化，消除了逼迫感，给彼此留足体面台阶。该招式不仅适用于酒店升房，在租房谈价、职场加薪中均可一键迁移！"
 `;
 
   const schema = z.object({

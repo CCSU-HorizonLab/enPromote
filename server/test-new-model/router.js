@@ -95,6 +95,7 @@ router.get('/init', (req, res) => {
         openingLine: scenario.openingLine,
         objectiveDescription: scenario.objectiveDescription,
         inventoryWeapons: scenario.inventoryWeapons,
+        smartSnapMatrix: scenario.smartSnapMatrix,
         climaxThresholdRound: scenario.climaxThresholdRound,
         currentRound: session.round,
         status: session.status,
