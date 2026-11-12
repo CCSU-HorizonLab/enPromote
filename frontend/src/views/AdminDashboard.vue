@@ -327,12 +327,13 @@ async function toggleStatus(account: AdminUser) {
   }
 }
 
+// 早期账号可能没有角色/状态字段，后端已按默认值补齐，这里再兜一层避免空白。
 function roleLabel(role: AdminUser['role']): string {
-  return { user: '普通用户', manager: '运营人员', admin: '管理员' }[role]
+  return { user: '普通用户', manager: '运营人员', admin: '管理员' }[role] || '普通用户'
 }
 
 function statusLabel(status: AdminUserStatus): string {
-  return { active: '正常', disabled: '已禁用', pending: '待审核' }[status]
+  return { active: '正常', disabled: '已禁用', pending: '待审核' }[status] || '正常'
 }
 
 function formatDate(value?: string): string {

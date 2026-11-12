@@ -4,6 +4,9 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 
+// 后端地址可通过环境变量覆盖，便于同机运行多个副本时避开端口冲突。
+const apiTarget = process.env.VITE_API_TARGET || 'http://localhost:3000'
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -23,7 +26,7 @@ export default defineConfig({
     open: false,
     proxy: {
       '/api': { // 代理路径
-        target: 'http://localhost:3000', // 后端服务地址
+        target: apiTarget, // 后端服务地址
         changeOrigin: true,
         secure: false,
         ws: true,
@@ -40,7 +43,7 @@ export default defineConfig({
         },
       },
       '/avatars': { // 代理头像路径
-        target: 'http://localhost:3000', // 后端服务地址
+        target: apiTarget, // 后端服务地址
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path, // 保持路径不变
@@ -57,7 +60,7 @@ export default defineConfig({
         },
       },
       '/default-avatar.png': { // 代理默认头像
-        target: 'http://localhost:3000', // 后端服务地址
+        target: apiTarget, // 后端服务地址
         changeOrigin: true,
         secure: false,
       },
