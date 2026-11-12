@@ -9,6 +9,17 @@ const router = express.Router();
 const listFields = 'username email phone role status avatar isVerified createdAt createTime totalWords currentChapter cet4.todayStudiedWords cet4.streakDays cet4.learnedWords';
 const detailFields = `${listFields} updatedAt chapters`;
 
+// 早期用户文档没有 role/status，Mongoose 默认值不会补到已有记录上。
+// 管理端统一按模型默认值展示，避免出现角色/状态空白或“正常账号”少算。
+function withLegacyDefaults(user) {
+    if (!user) return user;
+    return {
+        ...user,
+        role: user.role || 'user',
+        status: user.status || 'active'
+    };
+}
+
 // 用户查看接口允许 admin 和 manager；具体写操作再单独加更严格的权限。
 router.use(requireAdminOrManager);
 
@@ -47,7 +58,7 @@ router.get('/users', async (req, res) => {
             code: 200,
             message: '获取用户列表成功',
             data: {
-                items: users,
+                items: users.map(withLegacyDefaults),
                 pagination: {
                     page,
                     pageSize,
@@ -114,7 +125,14 @@ router.get('/stats', async (req, res) => {
                                 _id: null,
                                 totalUsers: { $sum: 1 },
                                 activeAccounts: {
-                                    $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] }
+                                    // 早期文档可能没有 status，按默认 active 计入。
+                                    $sum: {
+                                        $cond: [
+                                            { $eq: [{ $ifNull: ['$status', 'active'] }, 'active'] },
+                                            1,
+                                            0
+                                        ]
+                                    }
                                 },
                                 totalLearnedWords: { $sum: '$totalWords' }
                             }
@@ -182,7 +200,7 @@ router.get('/users/:userId', async (req, res) => {
         }
 
         logUserAction(req, 'ADMIN_VIEW_USER', { targetUserId: user._id });
-        return res.json({ code: 200, message: '获取用户详情成功', data: user });
+        return res.json({ code: 200, message: '获取用户详情成功', data: withLegacyDefaults(user) });
     } catch (error) {
         logger.error('管理员获取用户详情失败:', error);
         logApiError(req, error, 500);
@@ -210,7 +228,8 @@ router.patch('/users/:userId/status', requireAdmin, async (req, res) => {
             return res.status(404).json({ code: 404, message: '用户不存在' });
         }
         // MVP 只允许管理普通用户，不提供管理员或运营账号的状态修改。
-        if (user.role !== 'user') {
+        // 早期文档没有 role，按普通用户处理。
+        if ((user.role || 'user') !== 'user') {
             return res.status(403).json({ code: 403, message: '只能修改普通用户的账号状态' });
         }
 
@@ -225,7 +244,7 @@ router.patch('/users/:userId/status', requireAdmin, async (req, res) => {
         return res.json({
             code: 200,
             message: status === 'active' ? '用户已启用' : '用户已禁用',
-            data: { _id: user._id, username: user.username, role: user.role, status: user.status }
+            data: withLegacyDefaults({ _id: user._id, username: user.username, role: user.role, status: user.status })
         });
     } catch (error) {
         logger.error('管理员更新用户状态失败:', error);
