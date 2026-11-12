@@ -3,7 +3,8 @@ const router = express.Router();
 const npcProfiles = require('./data/npcProfiles.json');
 const scenarioGraph = require('./data/scenarioGraph.json');
 const { inspectMessageObjectiveFeatures, evaluateRapportSettlement } = require('./services/rapportScaleEngine');
-const { chatWithNpc, generateSettlementReceipt } = require('./services/aiService');
+const { chatWithNpc, generateSettlementReceipt, transcribeUserAudio } = require('./services/aiService');
+const { generateSpeech, TTS_MODEL } = require('./services/ttsService');
 
 // 内存会话缓存 (用于测试调试)
 const sessions = new Map();
@@ -89,8 +90,10 @@ router.get('/init', (req, res) => {
           name: npc.name,
           title: npc.title,
           persona: npc.persona,
+          ttsVoice: npc.ttsVoice || 'Charon',
           avatarAssets: npc.avatarAssets
         },
+        ttsModel: TTS_MODEL,
         dramaticContext: scenario.dramaticContext,
         openingLine: scenario.openingLine,
         objectiveDescription: scenario.objectiveDescription,
@@ -121,9 +124,34 @@ router.get('/init', (req, res) => {
  */
 router.post('/chat', async (req, res) => {
   try {
-    const { sessionId = 'default', message, usedFullScaffold } = req.body || {};
-    if (!message || !message.trim()) {
-      return res.status(400).json({ success: false, message: '输入内容不能为空' });
+    const { sessionId = 'default', message, usedFullScaffold, ttsEnabled, audioBase64, audioMimeType } = req.body || {};
+
+    let userMessage = message ? message.trim() : '';
+    let isVoiceInput = false;
+
+    // 若上传了语音音频，直接使用 Gemini 原生多模态转写口语
+    if (audioBase64) {
+      isVoiceInput = true;
+      try {
+        const transcribed = await transcribeUserAudio({
+          audioBase64,
+          mimeType: audioMimeType || 'audio/webm'
+        });
+        if (!transcribed || !transcribed.trim()) {
+          return res.status(400).json({
+            success: false,
+            message: 'Gemini 未能从录音中听到清晰的英文，请尝试大声清晰地重录！'
+          });
+        }
+        userMessage = transcribed.trim();
+      } catch (voiceErr) {
+        console.error('[AVG Voice Ingest Error]:', voiceErr);
+        return res.status(500).json({ success: false, message: '语音解析异常: ' + voiceErr.message });
+      }
+    }
+
+    if (!userMessage) {
+      return res.status(400).json({ success: false, message: '输入内容或录音不能为空' });
     }
 
     const session = getOrCreateSession(sessionId);
@@ -145,7 +173,7 @@ router.post('/chat', async (req, res) => {
 
     // 1. 客观特征与节奏锁扫描
     const objectiveTriggers = inspectMessageObjectiveFeatures({
-      userMessage: message.trim(),
+      userMessage: userMessage,
       currentRound: session.round,
       inventoryWeapons: scenario.inventoryWeapons,
       accumulatedFacts: session.factsVerified
@@ -173,14 +201,15 @@ router.post('/chat', async (req, res) => {
       scenario,
       npc,
       history: session.history,
-      userMessage: message.trim(),
+      userMessage: userMessage,
       pacingPhase: currentPacing.label
     });
 
     session.round += 1;
     session.history.push({
       role: 'user',
-      content: message.trim(),
+      content: userMessage,
+      isVoiceInput,
       evaluation: {
         toneScore: aiResult.evaluation.toneScore,
         toneFeedback: aiResult.evaluation.toneFeedback,
@@ -246,11 +275,35 @@ router.post('/chat', async (req, res) => {
       session.settlement = autoSettlement;
     }
 
+    // 3. TTS 语音生成（受前端 ttsEnabled 开关控制）
+    let audioDataUrl = null;
+    if (ttsEnabled === true) {
+      try {
+        const replyToSpeak = autoSettlement
+          ? `${aiResult.npcReply} ${autoSettlement.npcFinalReply || ''}`
+          : aiResult.npcReply;
+        audioDataUrl = await generateSpeech({
+          text: replyToSpeak,
+          voiceName: npc.ttsVoice || 'Charon'
+        });
+        // 回写到最近一条助手记录中
+        const lastMsg = session.history[session.history.length - 1];
+        if (lastMsg && lastMsg.role === 'assistant') {
+          lastMsg.audio = audioDataUrl;
+        }
+      } catch (ttsErr) {
+        console.warn('[AVG Chat TTS Warning]:', ttsErr.message);
+      }
+    }
+
     res.json({
       success: true,
       data: {
+        transcription: isVoiceInput ? userMessage : null,
+        isVoiceInput,
         npcReply: aiResult.npcReply,
         emotion: autoSettlement?.npcFinalEmotion || aiResult.emotion,
+        audio: audioDataUrl,
         evaluation: {
           toneScore: aiResult.evaluation.toneScore,
           toneFeedback: aiResult.evaluation.toneFeedback,
@@ -268,6 +321,61 @@ router.post('/chat', async (req, res) => {
     });
   } catch (error) {
     console.error('[AVG Chat Error]:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /api/avg-test/transcribe
+ * 单独使用 Gemini 原生多模态转写上传音频
+ */
+router.post('/transcribe', async (req, res) => {
+  try {
+    const { audioBase64, audioMimeType = 'audio/webm' } = req.body || {};
+    if (!audioBase64) {
+      return res.status(400).json({ success: false, message: '音频数据不能为空' });
+    }
+    const transcribed = await transcribeUserAudio({ audioBase64, mimeType: audioMimeType });
+    res.json({
+      success: true,
+      data: {
+        text: transcribed
+      }
+    });
+  } catch (error) {
+    console.error('[AVG Transcribe Error]:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /api/avg-test/tts
+ * 手动/点播指定文本的 Gemini 3.8 Flash-Lite TTS 语音
+ */
+router.post('/tts', async (req, res) => {
+  try {
+    const { text, voiceName, npcId = 'arthur' } = req.body || {};
+    if (!text || !text.trim()) {
+      return res.status(400).json({ success: false, message: '文本内容不能为空' });
+    }
+    const npc = npcProfiles[npcId];
+    const targetVoice = voiceName || npc?.ttsVoice || 'Charon';
+    const audioDataUrl = await generateSpeech({ text: text.trim(), voiceName: targetVoice });
+
+    if (!audioDataUrl) {
+      return res.status(500).json({ success: false, message: '语音合成失败，请检查网络或 API 配置' });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        audio: audioDataUrl,
+        voiceName: targetVoice,
+        model: TTS_MODEL
+      }
+    });
+  } catch (error) {
+    console.error('[AVG TTS Route Error]:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

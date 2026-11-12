@@ -80,9 +80,9 @@ app.use(session({
 }));
 logger.info('MongoDB session store 初始化成功');
 
-// 请求体解析
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// 请求体解析 (调高体积上限至 50mb，支持用户口语录音 Base64 直传)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(apiResponseMiddleware);
 
 // 静态文件服务

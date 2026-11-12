@@ -18,6 +18,17 @@
         <button class="btn-ghost" @click="inputMode = (inputMode === 'cards' ? 'speak' : 'cards')">
           {{ inputMode === 'cards' ? '🎙️ 切换至 Speak 模式' : '🎴 切换至 战术卡牌' }}
         </button>
+        <!-- Gemini 3.8 Flash-Lite TTS 语音开关 -->
+        <button 
+          class="btn-tts-toggle" 
+          :class="{ 'tts-active': ttsEnabled }" 
+          @click="toggleTTS"
+          :title="ttsEnabled ? '点击关闭 Gemini 3.8 Flash-Lite TTS 角色语音朗读' : '点击开启 Gemini 3.8 Flash-Lite TTS 角色语音朗读'"
+        >
+          <span class="tts-icon">{{ ttsEnabled ? '🔊' : '🔇' }}</span>
+          <span class="tts-label">TTS 语音: {{ ttsEnabled ? '开启' : '关闭' }}</span>
+          <span class="tts-model-chip">Gemini 3.8</span>
+        </button>
         <button class="btn-ghost" @click="showDossierModal = true">
           📁 机密情报
         </button>
@@ -129,8 +140,20 @@
         <div class="chat-viewport" ref="chatViewportRef">
           <!-- 开场白 -->
           <div class="chat-row npc-row">
-            <div class="bubble npc-bubble">
-              <span class="speaker">{{ scenarioData.npc.name }}</span>
+            <div class="bubble npc-bubble" :class="{ 'speaking-bubble': isPlayingVoice('opening') }">
+              <div class="bubble-header-row">
+                <span class="speaker">{{ scenarioData.npc.name }}</span>
+                <button
+                  class="btn-audio-speak"
+                  :class="{ 'is-playing': isPlayingVoice('opening'), 'is-loading': isLoadingVoice('opening') }"
+                  @click="playSpeech(scenarioData.openingLine, 'opening')"
+                  :title="isPlayingVoice('opening') ? '点击停止' : '播放开场语音 (Gemini 3.8 TTS)'"
+                >
+                  <span v-if="isLoadingVoice('opening')" class="spin-icon">⏳</span>
+                  <span v-else-if="isPlayingVoice('opening')" class="wave-icon">🔊 朗读中</span>
+                  <span v-else>🔊 朗读</span>
+                </button>
+              </div>
               <p class="speech-text">{{ scenarioData.openingLine }}</p>
             </div>
           </div>
@@ -142,8 +165,30 @@
             class="chat-row"
             :class="msg.role === 'user' ? 'user-row' : 'npc-row'"
           >
-            <div class="bubble" :class="msg.role === 'user' ? 'user-bubble' : 'npc-bubble'">
-              <span class="speaker">{{ msg.role === 'user' ? 'You' : scenarioData.npc.name }}</span>
+            <div 
+              class="bubble" 
+              :class="[
+                msg.role === 'user' ? 'user-bubble' : 'npc-bubble',
+                isPlayingVoice('msg_' + index) ? 'speaking-bubble' : ''
+              ]"
+            >
+              <div class="bubble-header-row" v-if="msg.role === 'assistant'">
+                <span class="speaker">{{ scenarioData.npc.name }}</span>
+                <button
+                  class="btn-audio-speak"
+                  :class="{ 'is-playing': isPlayingVoice('msg_' + index), 'is-loading': isLoadingVoice('msg_' + index) }"
+                  @click="playSpeech(msg.content, 'msg_' + index, msg.audio)"
+                  :title="isPlayingVoice('msg_' + index) ? '点击停止' : '播放语音 (Gemini 3.8 TTS)'"
+                >
+                  <span v-if="isLoadingVoice('msg_' + index)" class="spin-icon">⏳</span>
+                  <span v-else-if="isPlayingVoice('msg_' + index)" class="wave-icon">🔊 朗读中</span>
+                  <span v-else>🔊 朗读</span>
+                </button>
+              </div>
+              <div class="user-bubble-header" v-else>
+                <span class="speaker">You</span>
+                <span v-if="msg.isVoiceInput" class="voice-input-tag">🎙️ 语音脱稿实录</span>
+              </div>
               <p class="speech-text">{{ msg.content }}</p>
 
               <!-- 极简游戏动态浮标标签 (拒绝大段垃圾语法弹窗) -->
@@ -198,7 +243,19 @@
             </div>
 
             <div class="receipt-quote">
-              <span class="quote-label">{{ scenarioData.npc.name }} 的结案表态：</span>
+              <div class="quote-header-row">
+                <span class="quote-label">{{ scenarioData.npc.name }} 的结案表态：</span>
+                <button
+                  class="btn-audio-speak btn-audio-mini"
+                  :class="{ 'is-playing': isPlayingVoice('receipt_final'), 'is-loading': isLoadingVoice('receipt_final') }"
+                  @click="playSpeech(settlementData.npcFinalReply, 'receipt_final')"
+                  :title="isPlayingVoice('receipt_final') ? '点击停止' : '听结案表态 (Gemini 3.8 TTS)'"
+                >
+                  <span v-if="isLoadingVoice('receipt_final')" class="spin-icon">⏳</span>
+                  <span v-else-if="isPlayingVoice('receipt_final')" class="wave-icon">🔊 朗读中</span>
+                  <span v-else>🔊 听宣读</span>
+                </button>
+              </div>
               <p>"{{ settlementData.npcFinalReply }}"</p>
             </div>
 
@@ -248,6 +305,16 @@
               <div class="takeaway-head">
                 <span class="takeaway-icon">🎯</span>
                 <strong>本局破局金句 (One Key Takeaway)</strong>
+                <button
+                  class="btn-audio-speak btn-audio-mini"
+                  :class="{ 'is-playing': isPlayingVoice('takeaway'), 'is-loading': isLoadingVoice('takeaway') }"
+                  @click="playSpeech(settlementData.oneKeyTakeaway.nativeSentence, 'takeaway')"
+                  :title="isPlayingVoice('takeaway') ? '点击停止' : '地道朗读 (Gemini 3.8 TTS)'"
+                >
+                  <span v-if="isLoadingVoice('takeaway')" class="spin-icon">⏳</span>
+                  <span v-else-if="isPlayingVoice('takeaway')" class="wave-icon">🔊 朗读中</span>
+                  <span v-else>🔊 地道发音</span>
+                </button>
               </div>
               <p class="takeaway-sentence">"{{ settlementData.oneKeyTakeaway.nativeSentence }}"</p>
               <p class="takeaway-note">{{ settlementData.oneKeyTakeaway.usageNote }}</p>
@@ -337,12 +404,46 @@
               </div>
             </div>
 
+            <!-- Gemini 原生多模态语音录入区 -->
+            <div class="voice-recorder-bar">
+              <div v-if="!isRecording" class="voice-ready-row">
+                <button
+                  class="btn-voice-rec"
+                  @click="startVoiceRecording"
+                  :disabled="loading"
+                  title="使用麦克风直接说英语，Gemini 将直接理解你的发音、语用与礼貌度！"
+                >
+                  <span class="rec-icon">🎙️</span>
+                  <span class="rec-title">脱稿开麦 · 直接说英文对白</span>
+                  <span class="rec-model-chip">Gemini 多模态直听</span>
+                </button>
+                <span class="voice-tip-text">或在下方键盘打字输入交涉 ↵</span>
+              </div>
+
+              <!-- 正在录音交互态 -->
+              <div v-else class="voice-recording-row">
+                <div class="recording-indicator">
+                  <span class="pulsing-live-dot"></span>
+                  <span class="rec-status-text">正在录制英文发音...</span>
+                  <span class="rec-timer">{{ formatDuration(recordingDuration) }}</span>
+                </div>
+                <div class="rec-btn-group">
+                  <button class="btn-rec-cancel" @click="cancelVoiceRecording">
+                    ✕ 放弃重录
+                  </button>
+                  <button class="btn-rec-submit" @click="stopAndSendVoiceRecording">
+                    ⏹️ 停止并直接交涉
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <!-- 输入行 -->
-            <div class="speak-input-row">
+            <div class="speak-input-row" v-if="!isRecording">
               <textarea
                 ref="textareaRef"
                 v-model="userInput"
-                placeholder="键入你的英文交涉对白（可直接点击上方战术灵感填入参考，或脱稿自主表达冲击3星）..."
+                placeholder="键入你的英文交涉对白（可直接点击上方战术灵感填入参考，或点击上方开麦直接说话）..."
                 rows="2"
                 @keydown.enter.prevent="sendMessage"
                 :disabled="loading"
@@ -461,7 +562,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 
 const scenarioData = ref<any>(null);
 const currentRound = ref(0);
@@ -504,8 +605,329 @@ const pacingInfo = ref({
 const messages = ref<Array<{
   role: 'user' | 'assistant';
   content: string;
+  isVoiceInput?: boolean;
   evaluation?: any;
+  audio?: string;
 }>>([]);
+
+// --- Gemini 3.8 Flash-Lite TTS 语音朗读控制 ---
+const ttsEnabled = ref<boolean>(localStorage.getItem('avg_tts_enabled') !== 'false');
+const currentPlayingKey = ref<string | null>(null);
+const loadingVoiceKey = ref<string | null>(null);
+let currentAudio: HTMLAudioElement | null = null;
+const audioCacheMap = new Map<string, string>();
+
+function toggleTTS() {
+  ttsEnabled.value = !ttsEnabled.value;
+  localStorage.setItem('avg_tts_enabled', ttsEnabled.value ? 'true' : 'false');
+  if (ttsEnabled.value) {
+    showToast('🔊 已开启 NPC 语音自动朗读 (Gemini 3.8 Flash-Lite TTS)');
+  } else {
+    stopCurrentAudio();
+    showToast('🔇 已关闭 NPC 语音自动朗读');
+  }
+}
+
+function isPlayingVoice(key: string) {
+  return currentPlayingKey.value === key;
+}
+
+function isLoadingVoice(key: string) {
+  return loadingVoiceKey.value === key;
+}
+
+function stopCurrentAudio() {
+  if (currentAudio) {
+    try {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+    } catch (e) {
+      // ignore
+    }
+    currentAudio = null;
+  }
+  currentPlayingKey.value = null;
+}
+
+async function playSpeech(text: string, key: string, preloadedAudio?: string) {
+  if (!text) return;
+
+  // 点击正在播放的按钮 -> 停止播放
+  if (currentPlayingKey.value === key) {
+    stopCurrentAudio();
+    return;
+  }
+
+  stopCurrentAudio();
+
+  let audioUrl = preloadedAudio || audioCacheMap.get(key) || audioCacheMap.get(text);
+
+  if (!audioUrl) {
+    loadingVoiceKey.value = key;
+    try {
+      const res = await fetch('/api/avg-test/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          voiceName: scenarioData.value?.npc?.ttsVoice || 'Charon',
+          npcId: scenarioData.value?.npc?.npcId || 'arthur'
+        })
+      });
+      const json = await res.json();
+      if (json.success && json.data?.audio) {
+        audioUrl = json.data.audio;
+        audioCacheMap.set(key, audioUrl);
+        audioCacheMap.set(text, audioUrl);
+      } else {
+        // Fallback: 浏览器原生 SpeechSynthesis 兜底朗读
+        speakWithBrowser(text);
+        return;
+      }
+    } catch (e: any) {
+      console.warn('TTS request fallback to browser:', e);
+      speakWithBrowser(text);
+      return;
+    } finally {
+      loadingVoiceKey.value = null;
+    }
+  }
+
+  if (audioUrl) {
+    try {
+      const audio = new Audio(audioUrl);
+      currentAudio = audio;
+      currentPlayingKey.value = key;
+
+      audio.onended = () => {
+        if (currentPlayingKey.value === key) {
+          currentPlayingKey.value = null;
+          currentAudio = null;
+        }
+      };
+      audio.onerror = () => {
+        if (currentPlayingKey.value === key) {
+          currentPlayingKey.value = null;
+          currentAudio = null;
+        }
+      };
+
+      await audio.play();
+    } catch (err: any) {
+      console.warn('Playback error, falling back to speech synthesis:', err);
+      currentPlayingKey.value = null;
+      speakWithBrowser(text);
+    }
+  }
+}
+
+// 浏览器 Web Speech API 原生发音兜底
+function speakWithBrowser(text: string) {
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'en-GB';
+      utterance.rate = 0.95;
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.warn('Browser speech synthesis error:', e);
+    }
+  }
+}
+
+// --- Gemini 原生多模态录音输入与直传 ---
+const isRecording = ref(false);
+const recordingDuration = ref(0);
+let mediaRecorder: MediaRecorder | null = null;
+let recordingMediaStream: MediaStream | null = null;
+let audioChunks: Blob[] = [];
+let recordingTimer: any = null;
+
+function formatDuration(sec: number) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+async function startVoiceRecording() {
+  if (loading.value || isCompleted.value) return;
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
+    });
+
+    recordingMediaStream = stream;
+    audioChunks = [];
+
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4');
+
+    mediaRecorder = new MediaRecorder(stream, { mimeType });
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) {
+        audioChunks.push(e.data);
+      }
+    };
+
+    mediaRecorder.start(200);
+    isRecording.value = true;
+    recordingDuration.value = 0;
+
+    clearInterval(recordingTimer);
+    recordingTimer = setInterval(() => {
+      recordingDuration.value++;
+      if (recordingDuration.value >= 60) {
+        stopAndSendVoiceRecording();
+      }
+    }, 1000);
+
+    showToast('🎙️ 录音中... 请用英文清晰说出对白诉求');
+  } catch (err: any) {
+    console.error('麦克风权限开启失败:', err);
+    showToast('⚠️ 无法获取麦克风，请在浏览器权限设置中允许麦克风访问');
+  }
+}
+
+function cancelVoiceRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+  if (recordingMediaStream) {
+    recordingMediaStream.getTracks().forEach(t => t.stop());
+    recordingMediaStream = null;
+  }
+  clearInterval(recordingTimer);
+  isRecording.value = false;
+  recordingDuration.value = 0;
+  audioChunks = [];
+  showToast('✕ 已取消录音');
+}
+
+async function stopAndSendVoiceRecording() {
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+
+  clearInterval(recordingTimer);
+  const recordedSec = recordingDuration.value;
+  isRecording.value = false;
+
+  mediaRecorder.onstop = async () => {
+    if (recordingMediaStream) {
+      recordingMediaStream.getTracks().forEach(t => t.stop());
+      recordingMediaStream = null;
+    }
+
+    if (audioChunks.length === 0 || recordedSec < 1) {
+      showToast('⚠️ 录音时间太短，请清晰说出完整对白');
+      return;
+    }
+
+    const mimeType = mediaRecorder?.mimeType || 'audio/webm';
+    const blob = new Blob(audioChunks, { type: mimeType });
+    audioChunks = [];
+
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64Audio = reader.result as string;
+      await sendVoiceMessage(base64Audio, mimeType);
+    };
+    reader.readAsDataURL(blob);
+  };
+
+  mediaRecorder.stop();
+}
+
+async function sendVoiceMessage(audioBase64: string, mimeType: string) {
+  if (loading.value || isCompleted.value) return;
+
+  loading.value = true;
+  showToast('⏳ Gemini 正在聆听并解析口语...');
+
+  // 占位消息
+  const tempMsgIndex = messages.value.length;
+  messages.value.push({
+    role: 'user',
+    content: '🎙️ [正在解析录音...]',
+    isVoiceInput: true
+  });
+  await scrollToBottom();
+
+  try {
+    const res = await fetch('/api/avg-test/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        audioBase64,
+        audioMimeType: mimeType,
+        usedFullScaffold: usedFullScaffold.value,
+        ttsEnabled: ttsEnabled.value
+      })
+    });
+    const json = await res.json();
+
+    if (json.success && json.data) {
+      const userTranscript = json.data.transcription || 'Spoken English Input';
+      messages.value[tempMsgIndex].content = userTranscript;
+      messages.value[tempMsgIndex].evaluation = json.data.evaluation;
+
+      currentRound.value = json.data.currentRound;
+      liveScore.value = json.data.liveScore;
+      currentEmotion.value = json.data.emotion;
+      pacingInfo.value = json.data.pacing;
+      usedFullScaffold.value = !!json.data.usedFullScaffold;
+      factsVerified.value = json.data.factsVerified || [];
+      weaponsHit.value = json.data.weaponsHit || [];
+
+      // 添加 NPC 回复
+      const assistantMsg = {
+        role: 'assistant' as const,
+        content: json.data.npcReply,
+        audio: json.data.audio
+      };
+      messages.value.push(assistantMsg);
+
+      // 若开启了 TTS，自动朗读
+      if (ttsEnabled.value && json.data.audio) {
+        const msgKey = 'msg_' + (messages.value.length - 1);
+        playSpeech(json.data.npcReply, msgKey, json.data.audio);
+      } else if (ttsEnabled.value) {
+        speakWithBrowser(json.data.npcReply);
+      }
+
+      // 自动结案落锁 (完成 3 回合)
+      if (json.data.isCompleted && json.data.settlement) {
+        settlementData.value = json.data.settlement;
+        liveScore.value = json.data.settlement.finalScore;
+        isCompleted.value = true;
+        if (json.data.settlement.npcFinalEmotion) {
+          currentEmotion.value = json.data.settlement.npcFinalEmotion;
+        }
+      }
+    } else {
+      messages.value.splice(tempMsgIndex, 1);
+      showToast('⚠️ ' + (json.message || '录音未被成功识别'));
+    }
+  } catch (err: any) {
+    console.error('语音交涉请求失败:', err);
+    messages.value.splice(tempMsgIndex, 1);
+    showToast('⚠️ 语音请求出错，请重试');
+  } finally {
+    loading.value = false;
+    await scrollToBottom();
+  }
+}
+
+onBeforeUnmount(() => {
+  stopCurrentAudio();
+  cancelVoiceRecording();
+});
 
 const npcIcon = computed(() => {
   if (scenarioData.value?.npc?.npcId === 'arthur') return '👔';
@@ -754,7 +1176,8 @@ async function sendMessage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: text,
-        usedFullScaffold: usedFullScaffold.value
+        usedFullScaffold: usedFullScaffold.value,
+        ttsEnabled: ttsEnabled.value
       })
     });
     const json = await res.json();
@@ -775,10 +1198,18 @@ async function sendMessage() {
       }
 
       // 添加 NPC 回应
-      messages.value.push({
-        role: 'assistant',
-        content: json.data.npcReply
-      });
+      const assistantMsg = {
+        role: 'assistant' as const,
+        content: json.data.npcReply,
+        audio: json.data.audio
+      };
+      messages.value.push(assistantMsg);
+
+      // 自动播放 NPC 语音 (若开启 TTS 开关)
+      if (ttsEnabled.value && json.data.audio) {
+        const msgKey = 'msg_' + (messages.value.length - 1);
+        playSpeech(json.data.npcReply, msgKey, json.data.audio);
+      }
 
       // 自动结案落锁 (完成 3 回合)
       if (json.data.isCompleted && json.data.settlement) {
@@ -836,6 +1267,7 @@ async function resolveNegotiation() {
 
 // 重置会话
 async function resetSession() {
+  stopCurrentAudio();
   loading.value = true;
   try {
     await fetch('/api/avg-test/reset', {
@@ -958,6 +1390,97 @@ onMounted(() => {
 .btn-ghost:hover {
   background: #1e293b;
   border-color: #64748b;
+}
+
+/* Gemini 3.8 Flash-Lite TTS 语音总开关按钮 */
+.btn-tts-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid #334155;
+  color: #94a3b8;
+  padding: 5px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.25s ease;
+}
+.btn-tts-toggle:hover {
+  border-color: #64748b;
+  color: #cbd5e1;
+}
+.btn-tts-toggle.tts-active {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: #10b981;
+  color: #34d399;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);
+}
+.tts-model-chip {
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #38bdf8;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+/* 对白框头部与 TTS 播放按钮 */
+.bubble-header-row, .quote-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.btn-audio-speak {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid #334155;
+  color: #94a3b8;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-audio-speak:hover {
+  background: #1e293b;
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+.btn-audio-speak.is-playing {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: #10b981;
+  color: #34d399;
+  animation: pulse-border 1.5s infinite;
+}
+.btn-audio-speak.is-loading {
+  opacity: 0.7;
+  cursor: wait;
+}
+.btn-audio-mini {
+  margin-left: 8px;
+  font-size: 11px;
+  padding: 2px 6px;
+}
+.speaking-bubble {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.18);
+  transition: box-shadow 0.3s ease;
+}
+.spin-icon {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}
+@keyframes pulse-border {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+  50% { box-shadow: 0 0 0 4px rgba(16, 185, 129, 0); }
 }
 
 /* 主体布局 */
@@ -1803,6 +2326,149 @@ onMounted(() => {
 .btn-send-speak:disabled {
   background: #334155;
   cursor: not-allowed;
+}
+
+/* 语音录制条与动效 */
+.user-bubble-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.voice-input-tag {
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.voice-recorder-bar {
+  background: #090e17;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.voice-ready-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.btn-voice-rec {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(16, 185, 129, 0.2));
+  border: 1px solid #0284c7;
+  color: #f8fafc;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+.btn-voice-rec:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.4), rgba(16, 185, 129, 0.4));
+  border-color: #38bdf8;
+  transform: translateY(-1px);
+}
+.btn-voice-rec .rec-icon {
+  font-size: 16px;
+}
+.rec-model-chip {
+  background: #0f172a;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  margin-left: 4px;
+}
+.voice-tip-text {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.voice-recording-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.recording-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pulsing-live-dot {
+  width: 12px;
+  height: 12px;
+  background: #ef4444;
+  border-radius: 50%;
+  animation: pulse-live 1s infinite;
+}
+@keyframes pulse-live {
+  0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+  70% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+  100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+.rec-status-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f87171;
+}
+.rec-timer {
+  font-family: monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #f8fafc;
+  background: #1e293b;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.rec-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-rec-cancel {
+  background: transparent;
+  border: 1px solid #475569;
+  color: #94a3b8;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-rec-cancel:hover {
+  background: #1e293b;
+  color: #f87171;
+  border-color: #ef4444;
+}
+.btn-rec-submit {
+  background: #ef4444;
+  border: 1px solid #dc2626;
+  color: #fff;
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  animation: pulse-border-red 1.5s infinite;
+  transition: all 0.2s;
+}
+.btn-rec-submit:hover {
+  background: #dc2626;
+}
+@keyframes pulse-border-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0); }
 }
 
 .completed-lock-panel {

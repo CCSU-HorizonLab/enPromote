@@ -157,7 +157,62 @@ ${settlement.title}: ${settlement.storyText}
   return res.object;
 }
 
+/**
+ * 使用 Gemini 2.5 多模态模型原生直接转写用户上传的录音音频
+ * @param {Object} options
+ * @param {string} options.audioBase64 - Base64 格式音频数据
+ * @param {string} [options.mimeType='audio/webm'] - 音频 MimeType (audio/webm, audio/wav 等)
+ * @returns {Promise<string>} 转写出的英文字符串
+ */
+async function transcribeUserAudio({ audioBase64, mimeType = 'audio/webm' }) {
+  if (!audioBase64) return '';
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  if (!apiKey) {
+    throw new Error('GOOGLE_GENERATIVE_AI_API_KEY 未配置，无法调用语音转写');
+  }
+
+  const cleanBase64 = audioBase64.includes(',') ? audioBase64.split(',')[1] : audioBase64;
+  const cleanMime = mimeType.split(';')[0].trim();
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_MODEL}:generateContent?key=${apiKey}`;
+  const payload = {
+    contents: [
+      {
+        parts: [
+          {
+            inlineData: {
+              mimeType: cleanMime,
+              data: cleanBase64
+            }
+          },
+          {
+            text: "You are an accurate speech recognition engine for an interactive English dialogue game. Listen carefully to the user's voice recording. Transcribe the spoken English accurately into plain text. Return ONLY the transcribed English text, with no preamble, quotes, markdown, or commentary."
+          }
+        ]
+      }
+    ]
+  };
+
+  const { fetch } = require('undici');
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.warn('[AI Service Audio Transcribe Error]:', res.status, errText);
+    throw new Error('语音转写服务响应异常，请重试');
+  }
+
+  const json = await res.json();
+  const text = json.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+  return text;
+}
+
 module.exports = {
   chatWithNpc,
-  generateSettlementReceipt
+  generateSettlementReceipt,
+  transcribeUserAudio
 };
