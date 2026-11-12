@@ -96,6 +96,7 @@ router.get('/init', (req, res) => {
         objectiveDescription: scenario.objectiveDescription,
         inventoryWeapons: scenario.inventoryWeapons,
         smartSnapMatrix: scenario.smartSnapMatrix,
+        tacticalRounds: scenario.tacticalRounds || [],
         climaxThresholdRound: scenario.climaxThresholdRound,
         currentRound: session.round,
         status: session.status,
@@ -104,6 +105,7 @@ router.get('/init', (req, res) => {
         usedFullScaffold: session.usedFullScaffold,
         factsVerified: Array.from(session.factsVerified),
         weaponsHit: Array.from(session.allWeaponsHit),
+        history: session.history || [],
         settlement: session.settlement
       }
     });
@@ -176,8 +178,20 @@ router.post('/chat', async (req, res) => {
     });
 
     session.round += 1;
-    session.history.push({ role: 'user', content: message.trim() });
-    session.history.push({ role: 'assistant', content: aiResult.npcReply });
+    session.history.push({
+      role: 'user',
+      content: message.trim(),
+      evaluation: {
+        toneScore: aiResult.evaluation.toneScore,
+        toneFeedback: aiResult.evaluation.toneFeedback,
+        dynamicTag: penaltyTag || aiResult.evaluation.dynamicTag
+      }
+    });
+    session.history.push({
+      role: 'assistant',
+      content: aiResult.npcReply,
+      emotion: aiResult.emotion
+    });
 
     // 记录礼貌分
     const toneScore = Math.max(0, Math.min(30, aiResult.evaluation.toneScore));
@@ -186,11 +200,57 @@ router.post('/chat', async (req, res) => {
     const liveScore = computeLiveRapportScore(session);
     const updatedPacing = getPacingInfo(session.round, session.factsVerified);
 
+    let autoSettlement = null;
+    let isAutoCompleted = false;
+
+    // 当完成第 3 回合对白时，自动触发结案落锁，打印消费结案小票
+    if (session.round >= 3) {
+      isAutoCompleted = true;
+      const statement = message.trim();
+      const avgTone = session.toneScores.length > 0
+        ? session.toneScores.reduce((a, b) => a + b, 0) / session.toneScores.length
+        : 15;
+
+      const settlementMath = evaluateRapportSettlement({
+        factsVerified: session.factsVerified,
+        allWeaponsHit: session.allWeaponsHit,
+        avgToneScore: avgTone,
+        penaltyPoints: session.penaltyPoints,
+        usedFullScaffold: session.usedFullScaffold,
+        scenario
+      });
+
+      const receiptData = await generateSettlementReceipt({
+        scenario,
+        npc,
+        history: session.history,
+        finalStatement: statement,
+        settlement: settlementMath
+      });
+
+      autoSettlement = {
+        finalScore: settlementMath.finalScore,
+        stars: settlementMath.stars,
+        outcome: settlementMath.outcome,
+        title: settlementMath.title,
+        storyText: settlementMath.storyText,
+        scaffoldCapTriggered: settlementMath.scaffoldCapTriggered,
+        usedFullScaffold: session.usedFullScaffold,
+        scoreBreakdown: settlementMath.scoreBreakdown,
+        npcFinalReply: receiptData.npcFinalReply,
+        npcFinalEmotion: receiptData.npcFinalEmotion,
+        oneKeyTakeaway: receiptData.oneKeyTakeaway
+      };
+
+      session.status = 'completed';
+      session.settlement = autoSettlement;
+    }
+
     res.json({
       success: true,
       data: {
         npcReply: aiResult.npcReply,
-        emotion: aiResult.emotion,
+        emotion: autoSettlement?.npcFinalEmotion || aiResult.emotion,
         evaluation: {
           toneScore: aiResult.evaluation.toneScore,
           toneFeedback: aiResult.evaluation.toneFeedback,
@@ -198,10 +258,12 @@ router.post('/chat', async (req, res) => {
         },
         currentRound: session.round,
         pacing: updatedPacing,
-        liveScore,
+        liveScore: autoSettlement ? autoSettlement.finalScore : liveScore,
         usedFullScaffold: session.usedFullScaffold,
         factsVerified: Array.from(session.factsVerified),
-        weaponsHit: Array.from(session.allWeaponsHit)
+        weaponsHit: Array.from(session.allWeaponsHit),
+        isCompleted: isAutoCompleted,
+        settlement: autoSettlement
       }
     });
   } catch (error) {

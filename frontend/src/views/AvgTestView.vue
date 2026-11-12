@@ -3,27 +3,26 @@
     <!-- 顶部状态栏 -->
     <header class="top-nav">
       <div class="nav-brand">
-        <span class="badge-tag">AVG 语用沙盘 · 确定性天平版</span>
+        <span class="badge-tag">AVG 语用沙盘 · 3 回合短平快博弈</span>
         <h1>{{ scenarioData?.title || '正在加载剧本...' }}</h1>
       </div>
       <div class="nav-status" v-if="scenarioData">
         <div class="status-pill score-pill" :class="getScoreClass(liveScore)">
-          <span class="label">社交折服度</span>
+          <span class="label">好感折服度</span>
           <span class="val">{{ liveScore }} / 100</span>
         </div>
         <div class="status-pill round-pill">
-          <span class="label">交互轮次</span>
-          <span class="val">{{ currentRound }} 轮</span>
+          <span class="label">当前进程</span>
+          <span class="val">第 {{ Math.min(3, currentRound + 1) }} / 3 回合</span>
         </div>
-        <div class="status-pill mode-pill" :class="usedFullScaffold ? 'mode-pill-cheat' : 'mode-pill-pro'">
-          <span class="label">交涉战法</span>
-          <span class="val">{{ usedFullScaffold ? '⚠️ 小抄保底 (限2星)' : '🏆 脱稿组装 (冲3星)' }}</span>
-        </div>
+        <button class="btn-ghost" @click="inputMode = (inputMode === 'cards' ? 'speak' : 'cards')">
+          {{ inputMode === 'cards' ? '🎙️ 切换至 Speak 模式' : '🎴 切换至 战术卡牌' }}
+        </button>
         <button class="btn-ghost" @click="showDossierModal = true">
           📁 机密情报
         </button>
         <button class="btn-ghost" @click="resetSession" :disabled="loading">
-          🔄 重新挑战
+          🔄 重新演练
         </button>
       </div>
     </header>
@@ -48,11 +47,11 @@
           </div>
         </div>
 
-        <!-- 确定性社交破防天平 (Rapport Scale Meter) -->
+        <!-- 确定性社交破防天平 (去仪表盘化，突出状态) -->
         <div class="tracker-card meter-card">
           <div class="card-header">
             <span class="icon">⚖️</span>
-            <h3>社交破防天平 (Rapport Meter)</h3>
+            <h3>好感天平 (Rapport Meter)</h3>
             <span class="meter-status-tag" :class="getScoreClass(liveScore)">
               {{ getScoreTitle(liveScore) }}
             </span>
@@ -68,35 +67,27 @@
               ></div>
               <!-- 达标及格线 (65分) 与 高光升房线 (85分) -->
               <div class="marker marker-standard" title="65分及格线 (标准间入住)">
-                <span class="marker-label">65 (及格)</span>
+                <span class="marker-label">65 (标间)</span>
               </div>
               <div class="marker marker-penthouse" title="85分高光线 (行政套房升级)">
-                <span class="marker-label">85 (升房)</span>
+                <span class="marker-label">85 (套房)</span>
               </div>
             </div>
             <div class="meter-score-text">
               <span class="current-score">{{ liveScore }}</span>
-              <span class="total-score">/ 100 实时折服度</span>
+              <span class="total-score">/ 100 实时好感度</span>
             </div>
           </div>
 
-          <!-- 客观得分要素进度盘 -->
+          <!-- 极简目标达成状态 -->
           <div class="rubric-breakdown">
-            <div class="rubric-item" :class="{ achieved: factsVerified.includes('hasNameStated') }">
-              <span class="r-dot">{{ factsVerified.includes('hasNameStated') ? '✅' : '⚪' }}</span>
-              <span class="r-text">姓名身份核对 (+20)</span>
+            <div class="rubric-item" :class="{ achieved: factsVerified.includes('hasNameStated') || factsVerified.includes('hasProofProvided') }">
+              <span class="r-dot">{{ (factsVerified.includes('hasNameStated') || factsVerified.includes('hasProofProvided')) ? '✅' : '⚪' }}</span>
+              <span class="r-text">身份核验状态 ({{ (factsVerified.includes('hasNameStated') || factsVerified.includes('hasProofProvided')) ? '已确认预订' : '待出示凭证/姓名' }})</span>
             </div>
-            <div class="rubric-item" :class="{ achieved: factsVerified.includes('hasProofProvided') }">
-              <span class="r-dot">{{ factsVerified.includes('hasProofProvided') ? '✅' : '⚪' }}</span>
-              <span class="r-text">凭证/护照出示 (+20)</span>
-            </div>
-            <div class="rubric-item" :class="{ achieved: stancesHitCount >= 1 }">
-              <span class="r-dot">{{ stancesHitCount >= 1 ? '🛡️' : '⚪' }}</span>
-              <span class="r-text">社交润滑招式 (How: {{ Math.min(15, stancesHitCount * 8) }}/15)</span>
-            </div>
-            <div class="rubric-item" :class="{ achieved: domainChunksHitCount >= 1 }">
-              <span class="r-dot">{{ domainChunksHitCount >= 1 ? '📦' : '⚪' }}</span>
-              <span class="r-text">业务事实零件 (What: {{ Math.min(15, domainChunksHitCount * 8) }}/15)</span>
+            <div class="rubric-item" :class="{ achieved: liveScore >= 75 }">
+              <span class="r-dot">{{ liveScore >= 75 ? '✨' : '⏳' }}</span>
+              <span class="r-text">升房契机 ({{ liveScore >= 75 ? '好感充沛，可提升房' : '好感蓄力中，切忌抢跑' }})</span>
             </div>
           </div>
         </div>
@@ -271,170 +262,109 @@
           </div>
         </div>
 
-        <!-- 战术语块匣 (Tactical Deck: 高度紧凑单排 + 分类标签切换 + 可一键折叠) -->
-        <div class="weapons-bar" :class="{ 'deck-collapsed': isDeckCollapsed }" v-if="!isCompleted">
-          <div class="weapons-header">
-            <div class="wh-left-controls">
-              <span class="wh-title">🧩 战术装配</span>
-              <!-- 紧凑切换分类 Tabs -->
-              <div class="deck-tabs">
+        <!-- 战术行动区：三色卡牌态势流 vs Speak 自由开火流 -->
+        <div class="tactical-action-dock" v-if="!isCompleted">
+          <!-- 回合与阶段指示条 -->
+          <div class="dock-control-header">
+            <div class="dch-left">
+              <span class="round-badge">第 {{ Math.min(3, currentRound + 1) }} / 3 回合</span>
+              <span class="phase-badge">{{ currentRoundMeta.phaseTitle }}</span>
+              <span class="phase-hint-text">{{ currentRoundMeta.phaseHint }}</span>
+            </div>
+            <div class="dch-right">
+              <div class="mode-switcher-pills">
                 <button
-                  class="deck-tab-btn"
-                  :class="{ active: activeDeckTab === 'stances' }"
-                  @click="activeDeckTab = 'stances'"
+                  class="mode-pill-btn"
+                  :class="{ active: inputMode === 'cards' }"
+                  @click="inputMode = 'cards'"
                 >
-                  🛡️ 社交招式 ({{ pragmaticStances.length }})
+                  🎴 战术卡牌
                 </button>
                 <button
-                  class="deck-tab-btn"
-                  :class="{ active: activeDeckTab === 'chunks' }"
-                  @click="activeDeckTab = 'chunks'"
+                  class="mode-pill-btn"
+                  :class="{ active: inputMode === 'speak' }"
+                  @click="inputMode = 'speak'"
                 >
-                  📦 业务零件 ({{ domainChunks.length }})
-                </button>
-                <button
-                  class="deck-tab-btn"
-                  :class="{ active: activeDeckTab === 'all' }"
-                  @click="activeDeckTab = 'all'"
-                >
-                  全部 ({{ scenarioData.inventoryWeapons.length }})
+                  🎙️ Speak 自由
                 </button>
               </div>
-            </div>
-
-            <!-- 中间极简心法 / 当前组装状态 -->
-            <div class="mini-formula-bar" :class="{ 'formula-active': selectedStance || selectedChunk }">
-              <template v-if="selectedStance || selectedChunk">
-                <span class="mf-status-tag">⚡ 磁吸装配:</span>
-                <span v-if="selectedStance" class="mf-item mf-stance">{{ selectedStance.name }}</span>
-                <span v-else class="mf-placeholder">[待选招式 How]</span>
-                <span class="mf-op">+</span>
-                <span v-if="selectedChunk" class="mf-item mf-chunk">{{ selectedChunk.name }}</span>
-                <span v-else class="mf-placeholder">[待选零件 What]</span>
-                <button class="btn-clear-combo" @click.stop="clearSelection" title="重置组装">✕</button>
-              </template>
-              <template v-else>
-                <span class="mf-item mf-stance">🛡️ 招式 How</span>
-                <span class="mf-op">+</span>
-                <span class="mf-item mf-chunk">📦 零件 What</span>
-                <span class="mf-op">=</span>
-                <span class="mf-item mf-result">✨ 100% 得体</span>
-              </template>
-            </div>
-
-            <div class="wh-right-controls">
-              <span v-if="usedFullScaffold" class="badge-mode-cheat">⚠️ 小抄限2星</span>
-              <span v-else class="badge-mode-pro">🏆 脱稿冲3星</span>
-              <button
-                class="btn-toggle-deck"
-                @click="isDeckCollapsed = !isDeckCollapsed"
-                :title="isDeckCollapsed ? '展开装配坞' : '收起装配坞'"
-              >
-                {{ isDeckCollapsed ? '▴ 展开' : '▾ 收起' }}
-              </button>
             </div>
           </div>
 
-          <!-- 单排水平紧凑滚动容器 (仅在展开时显示) -->
-          <div class="compact-deck-body" v-show="!isDeckCollapsed">
-            <div class="weapon-chips">
+          <!-- 模式一：三色战术手牌模式 (默认) -->
+          <div v-if="inputMode === 'cards'" class="cards-mode-view">
+            <div class="tactical-hand-row">
               <div
-                v-for="w in displayedWeapons"
-                :key="w.id"
-                class="compact-weapon-card"
-                :class="[
-                  w.category === 'pragmatic_stance' ? 'card-stance' : 'card-chunk',
-                  {
-                    hit: weaponsHit.includes(w.phrase),
-                    locked: w.phase === 2 && pacingInfo.phase === 'phase1',
-                    'selected-card-stance': selectedStance?.id === w.id,
-                    'selected-card-chunk': selectedChunk?.id === w.id
-                  }
-                ]"
-                @click="handleInsertChunk(w)"
+                v-for="card in currentRoundCards"
+                :key="card.id"
+                class="tactical-card"
+                :class="[`card-${card.color}`, { 'card-loading': loading }]"
+                @click="handlePlayCard(card)"
               >
-                <div class="cwc-top">
-                  <span class="cwc-tag" :class="w.category === 'pragmatic_stance' ? 'tag-stance' : 'tag-domain'">
-                    {{ w.category === 'pragmatic_stance' ? '🛡️ 招式' : '📦 零件' }}
-                  </span>
-                  <strong class="cwc-name">{{ w.name }}</strong>
-                  <span v-if="weaponsHit.includes(w.phrase)" class="cwc-hit">🎯 已用</span>
-                  <span v-else-if="w.phase === 2 && pacingInfo.phase === 'phase1'" class="cwc-lock">🔒 P2</span>
-                  <button
-                    class="btn-mini-peek"
-                    @click.stop="handleOpenPeek(w)"
-                    title="偷看整句示范"
-                  >
-                    👀
+                <div class="tc-header">
+                  <span class="tc-tag" :class="`tag-${card.color}`">{{ card.tag }}</span>
+                  <strong class="tc-title">{{ card.title }}</strong>
+                </div>
+                <div class="tc-body">
+                  <p class="tc-english">"{{ card.english }}"</p>
+                </div>
+                <div class="tc-footer">
+                  <span class="tc-effect">{{ card.effect }}</span>
+                  <button class="btn-play-card" :disabled="loading">
+                    ⚡ 出牌 ↵
                   </button>
                 </div>
-                <div class="cwc-chunk">
-                  <code>{{ w.chunk }}</code>
-                </div>
-                <div class="cwc-intent-row">
-                  <span class="cwc-intent">{{ w.intent }}</span>
-                  <span class="cwc-action-hint">{{ (selectedStance?.id === w.id || selectedChunk?.id === w.id) ? '✓ 已装配' : '+ 磁吸' }}</span>
-                </div>
               </div>
+            </div>
+          </div>
+
+          <!-- 模式二：Speak / 自由输入模式 -->
+          <div v-else class="speak-mode-view">
+            <!-- 灵感提示折叠条 -->
+            <div class="speak-hints-bar">
+              <span class="sh-title">💡 本回合战术灵感：</span>
+              <div class="sh-chips">
+                <span
+                  v-for="card in currentRoundCards"
+                  :key="card.id"
+                  class="sh-chip"
+                  :class="`sh-${card.color}`"
+                  @click="userInput = card.english"
+                  :title="`点击采纳此句参考: ${card.english}`"
+                >
+                  {{ card.tag }}: {{ card.title }}
+                </span>
+              </div>
+            </div>
+
+            <!-- 输入行 -->
+            <div class="speak-input-row">
+              <textarea
+                ref="textareaRef"
+                v-model="userInput"
+                placeholder="键入你的英文交涉对白（可直接点击上方战术灵感填入参考，或脱稿自主表达冲击3星）..."
+                rows="2"
+                @keydown.enter.prevent="sendMessage"
+                :disabled="loading"
+              ></textarea>
+              <button
+                class="btn-send-speak"
+                @click="sendMessage"
+                :disabled="!userInput.trim() || loading"
+              >
+                发送交涉 ↵
+              </button>
             </div>
           </div>
         </div>
 
-        <!-- 输入交互栏 -->
-        <div class="input-panel">
-          <template v-if="!isCompleted">
-            <!-- 乐高智能磁吸成功提示 -->
-            <div v-if="isSmartSnapped" class="smart-snap-bar">
-              <span class="ssb-badge">⚡ 乐高智能磁吸已就绪</span>
-              <span class="ssb-text">已为您自动补齐地道语法胶水。可修改 <code>[Alex]</code> 等括号参数，或直接点击发送！</span>
-            </div>
-            <!-- 状态提示浮条 -->
-            <div v-if="usedFullScaffold" class="scaffold-warning-bar">
-              <span>⚠️ 本局已启用全句小抄保底：终局结算将封顶在 2 星（及格标准大床房），无法获得 3 星顶层行政套房。</span>
-            </div>
-            <div v-if="actionToast" class="action-toast-bar">
-              <span>{{ actionToast }}</span>
-            </div>
-
-            <div class="input-row">
-              <textarea
-                ref="textareaRef"
-                v-model="userInput"
-                placeholder="用英语和 Arthur 经理交涉（例如：Good evening. I believe I have a reservation under the name of Alex...）"
-                rows="2"
-                @keydown.enter.prevent="sendMessage"
-                :disabled="loading || isResolving"
-              ></textarea>
-              <div class="action-buttons">
-                <button
-                  class="btn-send"
-                  @click="sendMessage"
-                  :disabled="!userInput.trim() || loading || isResolving"
-                >
-                  发送对白 ↵
-                </button>
-                <button
-                  v-if="currentRound >= 1"
-                  class="btn-resolve"
-                  @click="resolveNegotiation"
-                  :disabled="loading || isResolving"
-                >
-                  ⚖️ 结案小票
-                </button>
-              </div>
-            </div>
-          </template>
-
-          <template v-else>
-            <div class="completed-lock-panel">
-              <span class="lock-icon">🔒</span>
-              <div class="lock-text">
-                <strong>本次酒店交涉已结案落幕！</strong>
-                <p>已生成真实结案账单与学情金句。点击“重新挑战”即可尝试不同对话策略！</p>
-              </div>
-              <button class="btn-primary" @click="resetSession">🔄 再次挑战</button>
-            </div>
-          </template>
+        <div v-else class="completed-lock-panel">
+          <span class="lock-icon">🔒</span>
+          <div class="lock-text">
+            <strong>本次酒店交涉已结案落幕！</strong>
+            <p>已生成真实结案账单与学情金句。可点击上方结案账单中的“再次演练”尝试不同对策！</p>
+          </div>
+          <button class="btn-primary" @click="resetSession">🔄 重新演练本场景</button>
         </div>
       </section>
     </main>
@@ -629,6 +559,30 @@ const domainChunksHitCount = computed(() => {
   return weaponsHit.value.filter((p: string) => chunkPhrases.has(p.toLowerCase().trim())).length;
 });
 
+// 战术手牌模式 vs Speak 自由开火模式
+const inputMode = ref<'cards' | 'speak'>('cards');
+
+const currentRoundCards = computed(() => {
+  const rounds = scenarioData.value?.tacticalRounds || [];
+  const idx = Math.min(rounds.length - 1, Math.max(0, currentRound.value));
+  return rounds[idx]?.cards || [];
+});
+
+const currentRoundMeta = computed(() => {
+  const rounds = scenarioData.value?.tacticalRounds || [];
+  const idx = Math.min(rounds.length - 1, Math.max(0, currentRound.value));
+  return rounds[idx] || {
+    phaseTitle: `第 ${Math.min(3, currentRound.value + 1)} 回合`,
+    phaseHint: '观察 NPC 态度，打出你的战术卡牌'
+  };
+});
+
+async function handlePlayCard(card: any) {
+  if (loading.value || isCompleted.value) return;
+  userInput.value = card.english;
+  await sendMessage();
+}
+
 // 紧凑装配坞折叠、分类 Tab 与乐高智能磁吸状态
 const isDeckCollapsed = ref(false);
 const activeDeckTab = ref<'stances' | 'chunks' | 'all'>('stances');
@@ -769,6 +723,10 @@ async function loadInitData() {
       weaponsHit.value = json.data.weaponsHit || [];
       isCompleted.value = json.data.status === 'completed';
       settlementData.value = json.data.settlement;
+      if (json.data.history && json.data.history.length > 0) {
+        messages.value = json.data.history;
+      }
+      await scrollToBottom();
     }
   } catch (err) {
     console.error('加载剧本失败:', err);
@@ -821,6 +779,16 @@ async function sendMessage() {
         role: 'assistant',
         content: json.data.npcReply
       });
+
+      // 自动结案落锁 (完成 3 回合)
+      if (json.data.isCompleted && json.data.settlement) {
+        settlementData.value = json.data.settlement;
+        liveScore.value = json.data.settlement.finalScore;
+        isCompleted.value = true;
+        if (json.data.settlement.npcFinalEmotion) {
+          currentEmotion.value = json.data.settlement.npcFinalEmotion;
+        }
+      }
     } else if (json.isCompleted) {
       isCompleted.value = true;
     }
@@ -1528,45 +1496,68 @@ onMounted(() => {
   cursor: default;
 }
 
-/* 战术装配坞 (Tactical Chunk Dock: 极紧凑单排 + 分类Tab + 折叠) */
-.weapons-bar {
+/* 战术行动区：三色战术手牌 vs Speak 模式 */
+.tactical-action-dock {
   flex-shrink: 0;
   background: #0d1527;
   border: 1px solid #1e2d4d;
-  border-radius: 10px;
-  padding: 8px 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  transition: all 0.2s ease;
+  border-radius: 12px;
+  padding: 10px 14px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
-.weapons-bar.deck-collapsed {
-  padding: 6px 12px;
-}
-.weapons-header {
+
+.dock-control-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
-.wh-left-controls {
+.dch-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  overflow: hidden;
 }
-.wh-title {
-  font-size: 12px;
+.round-badge {
+  background: #1e3a5f;
+  color: #38bdf8;
+  font-size: 11px;
   font-weight: 800;
-  color: #f8fafc;
+  padding: 2px 8px;
+  border-radius: 4px;
   white-space: nowrap;
 }
-.deck-tabs {
-  display: flex;
-  gap: 4px;
-  background: #090e1a;
-  padding: 2px;
-  border-radius: 6px;
-  border: 1px solid #1e293b;
+.phase-badge {
+  background: #334155;
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
 }
-.deck-tab-btn {
+.phase-hint-text {
+  font-size: 11px;
+  color: #94a3b8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mode-switcher-pills {
+  display: flex;
+  background: #090e1a;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+.mode-pill-btn {
   background: transparent;
   border: none;
   color: #94a3b8;
@@ -1575,258 +1566,124 @@ onMounted(() => {
   padding: 3px 8px;
   border-radius: 4px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.15s;
   white-space: nowrap;
 }
-.deck-tab-btn:hover {
+.mode-pill-btn:hover {
   color: #f8fafc;
 }
-.deck-tab-btn.active {
+.mode-pill-btn.active {
   background: #1e293b;
   color: #38bdf8;
   font-weight: 700;
 }
 
-/* 中间极简心法提示 */
-.mini-formula-bar {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10px;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(56, 189, 248, 0.15);
-  border-radius: 5px;
-  padding: 2px 8px;
-  transition: all 0.2s ease;
+/* 模式一：三色战术手牌网格 */
+.cards-mode-view {
+  width: 100%;
 }
-.mini-formula-bar.formula-active {
-  background: rgba(30, 58, 95, 0.8);
-  border-color: #38bdf8;
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+.tactical-hand-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
 }
-.mf-status-tag {
-  color: #38bdf8;
-  font-weight: 800;
-  font-size: 10px;
-}
-.mf-placeholder {
-  color: #64748b;
-  font-size: 10px;
-  font-style: italic;
-}
-.btn-clear-combo {
-  background: transparent;
-  border: none;
-  color: #94a3b8;
-  cursor: pointer;
-  font-size: 11px;
-  padding: 0 2px 0 6px;
-  line-height: 1;
-}
-.btn-clear-combo:hover {
-  color: #ef4444;
-}
-.mf-item {
-  font-weight: 700;
-}
-.mf-stance { color: #fbbf24; }
-.mf-chunk { color: #38bdf8; }
-.mf-op { color: #64748b; font-weight: 800; }
-.mf-result { color: #34d399; }
-
-.wh-right-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.badge-mode-cheat {
-  font-size: 10px;
-  font-weight: 700;
-  color: #f59e0b;
-  background: rgba(245, 158, 11, 0.12);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  padding: 2px 6px;
-  border-radius: 12px;
-}
-.badge-mode-pro {
-  font-size: 10px;
-  font-weight: 700;
-  color: #10b981;
-  background: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.35);
-  padding: 2px 6px;
-  border-radius: 12px;
-}
-.btn-toggle-deck {
-  background: #1e293b;
-  border: 1px solid #334155;
-  color: #cbd5e1;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-.btn-toggle-deck:hover {
-  background: #334155;
-  color: #f8fafc;
-}
-
-/* 单排紧凑语块卡片容器 */
-.compact-deck-body {
-  margin-top: 6px;
-}
-.weapon-chips {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 4px;
-  scrollbar-width: thin;
-}
-.compact-weapon-card {
-  min-width: 200px;
-  max-width: 240px;
-  flex-shrink: 0;
+.tactical-card {
   background: #111b33;
   border: 1px solid #233457;
-  border-radius: 6px;
-  padding: 6px 10px;
-  cursor: pointer;
+  border-radius: 8px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  transition: all 0.15s ease;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.compact-weapon-card.card-stance {
-  border-left: 3px solid #f59e0b;
-  background: #151828;
+.tactical-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 }
-.compact-weapon-card.card-stance:hover:not(.locked) {
-  border-color: #f59e0b;
-  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.2);
-  transform: translateY(-1px);
-}
-.compact-weapon-card.card-chunk {
-  border-left: 3px solid #0284c7;
-  background: #0f1a2d;
-}
-.compact-weapon-card.card-chunk:hover:not(.locked) {
-  border-color: #38bdf8;
-  box-shadow: 0 2px 10px rgba(56, 189, 248, 0.2);
-  transform: translateY(-1px);
-}
-.compact-weapon-card.hit {
-  border-color: #10b981;
-  background: rgba(16, 185, 129, 0.08);
-}
-.compact-weapon-card.locked {
-  opacity: 0.5;
-  filter: grayscale(0.5);
+.tactical-card.card-loading {
+  opacity: 0.6;
   cursor: not-allowed;
-}
-.compact-weapon-card.selected-card-stance {
-  border-color: #f59e0b !important;
-  background: rgba(245, 158, 11, 0.18) !important;
-  box-shadow: 0 0 12px rgba(245, 158, 11, 0.4) !important;
-  transform: translateY(-2px);
-}
-.compact-weapon-card.selected-card-chunk {
-  border-color: #38bdf8 !important;
-  background: rgba(56, 189, 248, 0.18) !important;
-  box-shadow: 0 0 12px rgba(56, 189, 248, 0.4) !important;
-  transform: translateY(-2px);
+  pointer-events: none;
 }
 
-.cwc-top {
+/* 绿卡：高情商委婉 */
+.tactical-card.card-green {
+  border-left: 3px solid #10b981;
+  background: #0c1c24;
+}
+.tactical-card.card-green:hover {
+  border-color: #10b981;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.2);
+}
+
+/* 蓝卡：确凿事实 */
+.tactical-card.card-blue {
+  border-left: 3px solid #0284c7;
+  background: #0d192d;
+}
+.tactical-card.card-blue:hover {
+  border-color: #38bdf8;
+  box-shadow: 0 4px 14px rgba(56, 189, 248, 0.2);
+}
+
+/* 紫卡：极速索求 / 绝杀 */
+.tactical-card.card-purple {
+  border-left: 3px solid #a855f7;
+  background: #19142b;
+}
+.tactical-card.card-purple:hover {
+  border-color: #c084fc;
+  box-shadow: 0 4px 14px rgba(168, 85, 247, 0.2);
+}
+
+.tc-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
-.cwc-tag {
-  font-size: 9px;
+.tc-tag {
+  font-size: 10px;
   font-weight: 800;
-  padding: 1px 4px;
-  border-radius: 3px;
+  padding: 1px 6px;
+  border-radius: 4px;
   white-space: nowrap;
 }
-.tag-stance {
-  background: rgba(245, 158, 11, 0.2);
-  color: #fbbf24;
-}
-.tag-domain {
-  background: rgba(56, 189, 248, 0.2);
-  color: #38bdf8;
-}
-.cwc-name {
-  font-size: 11px;
+.tag-green { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+.tag-blue { background: rgba(14, 165, 233, 0.2); color: #38bdf8; }
+.tag-purple { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
+.tc-title {
+  font-size: 12px;
   color: #f1f5f9;
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tc-body {
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.cwc-hit {
-  font-size: 9px;
-  background: #065f46;
-  color: #34d399;
-  padding: 1px 4px;
-  border-radius: 3px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-.cwc-lock {
-  font-size: 9px;
-  background: #334155;
-  color: #94a3b8;
-  padding: 1px 4px;
-  border-radius: 3px;
-  white-space: nowrap;
-}
-.btn-mini-peek {
-  background: transparent;
-  border: none;
-  font-size: 11px;
-  cursor: pointer;
-  padding: 0 2px;
-  line-height: 1;
-  opacity: 0.75;
-  transition: opacity 0.15s;
-}
-.btn-mini-peek:hover {
-  opacity: 1;
-  transform: scale(1.15);
-}
-
-.cwc-chunk {
-  background: #090e1a;
-  border: 1px solid #1e293b;
-  border-radius: 4px;
-  padding: 3px 6px;
-}
-.cwc-chunk code {
-  color: #38bdf8;
+.tc-english {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #e2e8f0;
+  font-style: italic;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 10.5px;
-  word-break: break-all;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: block;
-}
-.card-stance .cwc-chunk code {
-  color: #fbbf24;
 }
 
-.cwc-intent-row {
+.tc-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 6px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  padding-top: 6px;
 }
-.cwc-intent {
+.tc-effect {
   font-size: 10px;
   color: #94a3b8;
   overflow: hidden;
@@ -1834,17 +1691,133 @@ onMounted(() => {
   white-space: nowrap;
   flex: 1;
 }
-.cwc-action-hint {
-  font-size: 9px;
-  color: #64748b;
-  font-weight: 700;
-}
-.compact-weapon-card:hover .cwc-action-hint {
+.btn-play-card {
+  background: #1e293b;
+  border: 1px solid #334155;
   color: #38bdf8;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
 }
-.compact-weapon-card.card-stance:hover .cwc-action-hint {
-  color: #fbbf24;
+.tactical-card.card-green .btn-play-card { color: #34d399; border-color: rgba(16, 185, 129, 0.4); }
+.tactical-card.card-purple .btn-play-card { color: #c084fc; border-color: rgba(168, 85, 247, 0.4); }
+.tactical-card:hover .btn-play-card {
+  background: #0284c7;
+  color: #fff;
+  border-color: #0284c7;
 }
+.tactical-card.card-green:hover .btn-play-card {
+  background: #10b981;
+  color: #fff;
+  border-color: #10b981;
+}
+.tactical-card.card-purple:hover .btn-play-card {
+  background: #a855f7;
+  color: #fff;
+  border-color: #a855f7;
+}
+
+/* 模式二：Speak / 自由输入模式 */
+.speak-mode-view {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.speak-hints-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #090e1a;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+.sh-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+.sh-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+.sh-chip {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+.sh-chip:hover {
+  opacity: 0.85;
+  text-decoration: underline;
+}
+.sh-green { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+.sh-blue { background: rgba(14, 165, 233, 0.2); color: #38bdf8; }
+.sh-purple { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
+
+.speak-input-row {
+  display: flex;
+  gap: 10px;
+}
+.speak-input-row textarea {
+  flex: 1;
+  background: #090e17;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #f8fafc;
+  font-size: 13.5px;
+  line-height: 1.4;
+  height: 52px;
+  min-height: 48px;
+  max-height: 72px;
+  resize: none;
+}
+.speak-input-row textarea:focus {
+  outline: none;
+  border-color: #38bdf8;
+}
+.btn-send-speak {
+  background: #0284c7;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0 16px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.btn-send-speak:hover:not(:disabled) {
+  background: #0369a1;
+}
+.btn-send-speak:disabled {
+  background: #334155;
+  cursor: not-allowed;
+}
+
+.completed-lock-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  padding: 12px 18px;
+  gap: 16px;
+}
+.lock-icon { font-size: 24px; }
+.lock-text strong { color: #38bdf8; font-size: 13px; }
+.lock-text p { margin: 2px 0 0 0; font-size: 12px; color: #94a3b8; }
 
 /* 输入控制栏小抄警示与提示条 */
 .smart-snap-bar {

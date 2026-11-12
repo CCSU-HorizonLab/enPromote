@@ -95,6 +95,119 @@
         "fullScaffold": "Could you kindly confirm if the security deposit is fully refundable upon check-out?"
       }
     ],
+    "tacticalRounds": [
+      {
+        "round": 1,
+        "phaseTitle": "第 1 回合：身份核验",
+        "phaseHint": "Arthur 正在严谨查验身份。请先出示凭据或礼貌报出姓名，切忌直接要房！",
+        "cards": [
+          {
+            "id": "r1_blue",
+            "type": "evidence",
+            "color": "blue",
+            "tag": "🔵 确凿凭证",
+            "title": "出示护照与订单号",
+            "english": "Certainly. Here is my confirmation number LON-88219 and passport for your verification.",
+            "intent": "配合老派经理规程，主动出示客观凭证建立合法性",
+            "effect": "事实得分 +20，核验通过"
+          },
+          {
+            "id": "r1_green",
+            "type": "diplomacy",
+            "color": "green",
+            "tag": "🟢 委婉探询",
+            "title": "礼貌询问预订",
+            "english": "Good evening. I was wondering if you could check if there is a reservation under the name of Alex?",
+            "intent": "以虚拟语气委婉探询姓名，破除对立情绪",
+            "effect": "礼貌好感 +15，身份核验通过"
+          },
+          {
+            "id": "r1_purple",
+            "type": "bold",
+            "color": "purple",
+            "tag": "🟣 强硬催促",
+            "title": "要求立刻给房",
+            "english": "I paid in full, so I'd like my room sorted out right now.",
+            "intent": "直白施压要求马上办妥，缺乏敬语缓冲",
+            "effect": "⚠️ 冒犯绅士礼节，好感暴跌 -15"
+          }
+        ]
+      },
+      {
+        "round": 2,
+        "phaseTitle": "第 2 回合：排查延迟",
+        "phaseHint": "Arthur 正在核对终端备份。请表示体谅并委婉提出排查建议。",
+        "cards": [
+          {
+            "id": "r2_green",
+            "type": "diplomacy",
+            "color": "green",
+            "tag": "🟢 委婉体谅",
+            "title": "探询备份系统",
+            "english": "Given the late hour and system delay, I was wondering if it might be possible to check your backup terminal?",
+            "intent": "体谅夜班辛苦，以万能虚拟语气委婉提议查备用机",
+            "effect": "好感度 +20，破防触发赞许"
+          },
+          {
+            "id": "r2_blue",
+            "type": "evidence",
+            "color": "blue",
+            "tag": "🔵 业务核实",
+            "title": "确认押金政策",
+            "english": "Could you kindly confirm if the security deposit is fully refundable upon check-out?",
+            "intent": "严谨商量式确认核心条款，避免事后争议",
+            "effect": "业务清晰度 +15，常规稳步推进"
+          },
+          {
+            "id": "r2_purple",
+            "type": "bold",
+            "color": "purple",
+            "tag": "🟣 抢跑索求",
+            "title": "急躁索要升级",
+            "english": "Since your system messed up, can you just give me a free suite right now?",
+            "intent": "在尚未完全确认前强索套房",
+            "effect": "⚠️ 触发操之过急防抢跑锁 (-15)"
+          }
+        ]
+      },
+      {
+        "round": 3,
+        "phaseTitle": "第 3 回合：终局交涉",
+        "phaseHint": "订单已确认，但标间水管故障报停。此时是争取顶层行政套房的唯一机会！",
+        "cards": [
+          {
+            "id": "r3_purple",
+            "type": "bold",
+            "color": "purple",
+            "tag": "🟣 礼貌绝杀",
+            "title": "争取礼遇升级",
+            "english": "In light of the inconvenience tonight, I was wondering if a complimentary upgrade might be available?",
+            "intent": "将招式与升房零件合体，发起绅士升房请求",
+            "effect": "若好感 ≥ 75 触发 3 星顶层套房！"
+          },
+          {
+            "id": "r3_green",
+            "type": "diplomacy",
+            "color": "green",
+            "tag": "🟢 稳健退让",
+            "title": "协调高楼层标间",
+            "english": "I understand the situation. Could you kindly arrange any quiet room available on a higher floor?",
+            "intent": "体面接受现实，稳妥争取高楼层安静房间",
+            "effect": "稳拿 2 星标准大床房入住"
+          },
+          {
+            "id": "r3_blue",
+            "type": "evidence",
+            "color": "blue",
+            "tag": "🔵 消极妥协",
+            "title": "随便给间房",
+            "english": "Just give me whatever you have left, even the emergency room by the elevator.",
+            "intent": "放弃争取，仓促入住",
+            "effect": "落入 1 星电梯机房单间结局"
+          }
+        ]
+      }
+    ],
     "smartSnapMatrix": {
       "stance_wondering": {
         "chunk_reservation": "Good evening. I was wondering if you could check if there is a reservation under the name of [Alex]?",
