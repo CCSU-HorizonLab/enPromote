@@ -174,15 +174,27 @@ router.get('/level/:level', (req, res) => {
 // 清理日志会影响服务器数据，只允许 admin 执行。
 router.post('/clean', requireAdmin, (req, res) => {
     try {
-        const { daysToKeep = 30 } = req.body;
-        logViewer.cleanOldLogs(daysToKeep);
-        
-        logUserAction(req, 'CLEAN_OLD_LOGS', { daysToKeep });
-        logger.info(`管理员清理旧日志，保留${daysToKeep}天`);
-        
+        const { daysToKeep: rawDays = 30 } = req.body || {};
+        const daysToKeep = Number(rawDays);
+        if (!Number.isInteger(daysToKeep) || daysToKeep < 1 || daysToKeep > 365) {
+            return res.status(400).json({
+                code: 400,
+                message: '保留天数必须是 1 到 365 之间的整数'
+            });
+        }
+
+        const result = logViewer.cleanOldLogs(daysToKeep);
+
+        logUserAction(req, 'CLEAN_OLD_LOGS', {
+            daysToKeep,
+            totalRemoved: result.totalRemoved
+        });
+        logger.info(`管理员清理旧日志，保留${daysToKeep}天，共删除${result.totalRemoved}条`);
+
         res.json({
             code: 200,
-            message: '清理旧日志成功'
+            message: `已清理 ${daysToKeep} 天前的日志`,
+            data: result
         });
     } catch (error) {
         logger.error('清理旧日志失败', error);
