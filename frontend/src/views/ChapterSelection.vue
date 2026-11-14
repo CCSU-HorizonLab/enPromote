@@ -86,7 +86,11 @@
               <span class="scene-tag">{{ chapter.scenarioLabel }}</span>
               <h2>{{ chapter.name }}</h2>
             </div>
-            <span v-if="currentChapter === chapter.id" class="current-pill">当前主线</span>
+            <div class="scene-badges">
+              <span v-if="isHotelPrivilegeExempted(chapter.id)" class="privilege-pill">🏅 黑金盲听免修</span>
+              <span v-else-if="getAvgStars(chapter.id) > 0" class="avg-star-pill">⭐ {{ getAvgStars(chapter.id) }}/3 星</span>
+              <span v-if="currentChapter === chapter.id" class="current-pill">当前主线</span>
+            </div>
           </div>
 
           <p class="scene-description">{{ chapter.description }}</p>
@@ -127,19 +131,34 @@
 
           <div class="story-unlock" :class="{ unlocked: isChapterCompleted(chapter.id) }">
             <div>
-              <span>{{ isChapterCompleted(chapter.id) ? '剧情已解锁' : '剧情挑战' }}</span>
+              <span>{{ isHotelPrivilegeExempted(chapter.id) ? '黑金免修已激活' : (isChapterCompleted(chapter.id) ? '剧情已解锁' : '剧情挑战') }}</span>
               <strong>
-                {{ isChapterCompleted(chapter.id) ? `${chapter.storyTitle} 可进入` : '完成全部训练后解锁角色剧情' }}
+                {{
+                  isHotelPrivilegeExempted(chapter.id)
+                    ? '已凭黑金盲听直通：模块 A 免修全解锁'
+                    : (isChapterCompleted(chapter.id) ? `${chapter.storyTitle} 可进入` : '完成全部训练后解锁角色剧情')
+                }}
               </strong>
             </div>
-            <button
-              class="story-button"
-              type="button"
-              :disabled="!isChapterCompleted(chapter.id)"
-              @click.stop="goToStory"
-            >
-              {{ isChapterCompleted(chapter.id) ? '进入剧情' : '未解锁' }}
-            </button>
+            <div class="story-btn-group">
+              <button
+                v-if="chapter.id === 'A'"
+                class="ng-fasttrack-btn"
+                type="button"
+                @click.stop="goToHotelNgPlus"
+                title="挑战二周目午夜电话盲听，零显露通关解锁黑金特权"
+              >
+                🎧 二周目盲听
+              </button>
+              <button
+                class="story-button"
+                type="button"
+                :disabled="!isChapterCompleted(chapter.id)"
+                @click.stop="goToStory(chapter.id)"
+              >
+                {{ isChapterCompleted(chapter.id) ? '进入实战' : '未解锁' }}
+              </button>
+            </div>
           </div>
 
           <div class="scene-actions">
@@ -194,9 +213,9 @@ const chapters = ref([
     category: 'travel',
     categoryLabel: '旅行出行',
     scenarioLabel: 'Hotel Mission',
-    description: '练习入住登记、房间服务、退房结账等酒店沟通任务。',
-    storyTitle: '深夜前台入住模拟',
-    vocabulary: ['reception', 'check-in', 'reservation', 'lobby', 'checkout']
+    description: '围绕入住核实、押金条款、礼貌升房与退房沟通，完成 5 关训练后迎战 Arthur。',
+    storyTitle: 'Arthur Boss 实战：消失的预订单',
+    vocabulary: ['reservation', 'confirmation', 'complimentary', 'upgrade', 'concierge']
   },
   {
     id: 'B',
@@ -260,6 +279,14 @@ const getChapterData = (chapterId) => {
   return userInfo.value?.chapters?.[chapterId] || {}
 }
 
+const isHotelPrivilegeExempted = (chapterId) => {
+  return Boolean(getChapterData(chapterId).privilegeExempted)
+}
+
+const getAvgStars = (chapterId) => {
+  return Number(getChapterData(chapterId).avgStars || 0)
+}
+
 const getChapterProgress = (chapterId) => {
   const chapterProgress = getChapterData(chapterId)
   return levelSteps.reduce((count, step) => count + (chapterProgress[step.key] ? 1 : 0), 0)
@@ -304,8 +331,22 @@ const selectChapter = async (chapterId) => {
   }
 }
 
-const goToStory = () => {
+const goToStory = (chapterId = 'A') => {
+  if (chapterId === 'A') {
+    router.push({
+      path: '/avg-test',
+      query: { scenarioId: 'scenario_hotel_01', chapter: 'A', from: 'chapters' }
+    })
+    return
+  }
   router.push('/story')
+}
+
+const goToHotelNgPlus = () => {
+  router.push({
+    path: '/avg-test',
+    query: { scenarioId: 'scenario_hotel_01', chapter: 'A', runMode: 'ng_plus', from: 'chapters' }
+  })
 }
 
 const fetchUserInfo = async () => {
@@ -742,5 +783,55 @@ onMounted(fetchUserInfo)
   .scene-meta {
     grid-template-columns: 1fr;
   }
+}
+
+.scene-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.privilege-pill {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  color: #fde68a;
+  border: 1px solid #f59e0b;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.avg-star-pill {
+  background: rgba(245, 158, 11, 0.14);
+  color: #b45309;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.story-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ng-fasttrack-btn {
+  border: 1px solid rgba(217, 119, 6, 0.45);
+  background: rgba(254, 243, 199, 0.72);
+  color: #92400e;
+  font-size: 12.5px;
+  font-weight: 800;
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 0.15s, background 0.15s;
+}
+
+.ng-fasttrack-btn:hover {
+  background: #fde68a;
+  transform: translateY(-1px);
 }
 </style>

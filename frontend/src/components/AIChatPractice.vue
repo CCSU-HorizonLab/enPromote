@@ -341,12 +341,15 @@ const getSceneName = computed(() => {
 })
 
 // 加载历史对话
+// 兼容 apiResponseMiddleware 包装后的响应 ({ success: true, code: 'SUCCESS' }) 与原始 { code: 200 }
+const isApiSuccess = (payload) => Boolean(payload && (payload.success === true || payload.code === 200 || payload.code === 'SUCCESS'))
+
 const loadChatHistory = async (sessionId) => {
   try {
     const response = await fetch(`/api/aiApi/getChatHistory?sessionId=${sessionId}`)
     const data = await response.json()
     
-    if (data.code === 200) {
+    if (isApiSuccess(data)) {
       const { messages: historyMessages, sessionInfo } = data.data
       
       // 恢复会话信息
@@ -390,7 +393,7 @@ const startTaskChat = async () => {
     })
 
     const data = await response.json()
-    if (data.code === 200) {
+    if (isApiSuccess(data)) {
       sessionId.value = data.data.sessionId
       sceneInfo.value = data.data.sceneInfo
       tasks.value = data.data.tasks
@@ -658,8 +661,8 @@ const showPracticeWords = async () => {
   try {
     const response = await fetch('/api/aiApi/practice_words')
     const data = await response.json()
-    if (data.code === 200) {
-      practiceWords.value = data.data.words || []
+    if (isApiSuccess(data)) {
+      practiceWords.value = data.data?.words || []
       showWordsSidebar.value = true
     }
   } catch (error) {

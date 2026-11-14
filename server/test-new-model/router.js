@@ -1,13 +1,104 @@
 const express = require('express');
 const router = express.Router();
+const User = require('../modules/User');
 const npcProfiles = require('./data/npcProfiles.json');
 const scenarioGraph = require('./data/scenarioGraph.json');
 const { inspectMessageObjectiveFeatures, evaluateRapportSettlement } = require('./services/rapportScaleEngine');
 const { chatWithNpc, generateSettlementReceipt, transcribeUserAudio } = require('./services/aiService');
 const { generateSpeech, TTS_MODEL } = require('./services/ttsService');
+const { getSceneWordBank } = require('../config/sceneVocabularies');
+const { syncUserWordsForScene } = require('../utils/sceneWordSync');
 
-// 内存会话缓存 (用于测试调试)
+// 内存会话缓存 (按登录用户隔离，兼容未登录沙盒试玩)
 const sessions = new Map();
+
+const PRESTIGE_RANK = {
+  assisted: 1,
+  standard: 2,
+  authentic: 3,
+  black_gold: 4
+};
+
+function resolveSessionId(req, explicitSessionId = null) {
+  const baseId = explicitSessionId || req.body?.sessionId || req.query?.sessionId || 'default';
+  if (req.session?.userid) {
+    return `${baseId}_user_${req.session.userid}`;
+  }
+  return baseId;
+}
+
+/**
+ * 将模块 B 结算星级、荣誉段位与黑金盲听免修特权持久化至模块 A 对应章节进度
+ */
+async function persistAvgSettlementToChapter({ userId, chapterId = 'A', settlement }) {
+  if (!userId || !settlement) {
+    return { persisted: false };
+  }
+  try {
+    const user = await User.findById(userId);
+    if (!user) return { persisted: false };
+
+    const targetChapter = String(chapterId || 'A').toUpperCase();
+    const existing = user.chapters.get(targetChapter) || {
+      level: 1,
+      score: 0,
+      completedWords: 0,
+      wordP: false,
+      spellP: false,
+      listenP: false,
+      customsP: false,
+      coverP: false,
+      avgStars: 0,
+      avgScore: 0,
+      avgPrestigeTier: '',
+      avgCompletedAt: null,
+      privilegeExempted: false
+    };
+
+    const existingObj = typeof existing.toObject === 'function' ? existing.toObject() : { ...existing };
+    const nextStars = Math.max(existingObj.avgStars || 0, settlement.stars || 0);
+    const nextScore = Math.max(existingObj.avgScore || 0, settlement.finalScore || 0);
+    const currentRank = PRESTIGE_RANK[existingObj.avgPrestigeTier] || 0;
+    const incomingRank = PRESTIGE_RANK[settlement.prestigeTier] || 0;
+    const nextTier = incomingRank >= currentRank ? (settlement.prestigeTier || existingObj.avgPrestigeTier) : existingObj.avgPrestigeTier;
+    const unlockedBlackGold = Boolean(existingObj.privilegeExempted || settlement.prestigeTier === 'black_gold' || settlement.privilegeUnlocked);
+
+    const updated = {
+      ...existingObj,
+      avgStars: nextStars,
+      avgScore: nextScore,
+      avgPrestigeTier: nextTier,
+      avgCompletedAt: new Date(),
+      privilegeExempted: unlockedBlackGold
+    };
+
+    // 二周目黑金盲听免修特权：点亮模块 A 酒店篇全关免修通行
+    if (unlockedBlackGold) {
+      updated.wordP = true;
+      updated.spellP = true;
+      updated.listenP = true;
+      updated.customsP = true;
+      updated.coverP = true;
+      updated.level = Math.max(updated.level || 1, 6);
+    }
+
+    user.chapters.set(targetChapter, updated);
+    user.markModified('chapters');
+    await user.save();
+
+    return {
+      persisted: true,
+      chapterId: targetChapter,
+      avgStars: updated.avgStars,
+      avgScore: updated.avgScore,
+      avgPrestigeTier: updated.avgPrestigeTier,
+      privilegeExempted: updated.privilegeExempted
+    };
+  } catch (err) {
+    console.warn('[AVG Persist Settlement Warning]:', err.message);
+    return { persisted: false, error: err.message };
+  }
+}
 
 function selectRandomTwist(scenario) {
   const pool = scenario?.ngPlusTwists;
@@ -94,7 +185,7 @@ function computeLiveRapportScore(session) {
  */
 router.get('/init', (req, res) => {
   try {
-    const sessionId = req.query.sessionId || 'default';
+    const sessionId = resolveSessionId(req, req.query.sessionId);
     const requestedRunMode = req.query.runMode || null;
     const session = getOrCreateSession(sessionId, requestedRunMode);
     const scenario = scenarioGraph[session.scenarioId];
@@ -113,6 +204,7 @@ router.get('/init', (req, res) => {
     res.json({
       success: true,
       data: {
+        isLoggedIn: Boolean(req.session?.userid),
         scenarioId: scenario.scenarioId,
         title: scenario.title,
         sceneVisual: scenario.sceneVisual,
@@ -167,7 +259,8 @@ router.get('/init', (req, res) => {
  */
 router.post('/chat', async (req, res) => {
   try {
-    const { sessionId = 'default', message, usedFullScaffold, ttsEnabled, audioBase64, audioMimeType, inputMode } = req.body || {};
+    const { sessionId: rawSessionId = 'default', chapter = 'A', message, usedFullScaffold, ttsEnabled, audioBase64, audioMimeType, inputMode } = req.body || {};
+    const sessionId = resolveSessionId(req, rawSessionId);
 
     let userMessage = message ? message.trim() : '';
     let isVoiceInput = false;
@@ -339,6 +432,15 @@ router.post('/chat', async (req, res) => {
 
       session.status = 'completed';
       session.settlement = autoSettlement;
+
+      if (req.session?.userid) {
+        const persisted = await persistAvgSettlementToChapter({
+          userId: req.session.userid,
+          chapterId: chapter,
+          settlement: autoSettlement
+        });
+        autoSettlement.persistedChapter = persisted;
+      }
     }
 
     // 3. TTS 语音生成（受前端 ttsEnabled 开关控制）
@@ -457,10 +559,18 @@ router.post('/tts', async (req, res) => {
  */
 router.post('/resolve-check', async (req, res) => {
   try {
-    const { sessionId = 'default', finalStatement } = req.body || {};
+    const { sessionId: rawSessionId = 'default', chapter = 'A', finalStatement } = req.body || {};
+    const sessionId = resolveSessionId(req, rawSessionId);
     const session = getOrCreateSession(sessionId);
 
     if (session.status === 'completed' && session.settlement) {
+      if (req.session?.userid && !session.settlement.persistedChapter?.persisted) {
+        session.settlement.persistedChapter = await persistAvgSettlementToChapter({
+          userId: req.session.userid,
+          chapterId: chapter,
+          settlement: session.settlement
+        });
+      }
       return res.json({
         success: true,
         data: {
@@ -524,9 +634,17 @@ router.post('/resolve-check', async (req, res) => {
       oneKeyTakeaway: receiptData.oneKeyTakeaway
     };
 
-    // 3. 落锁封板
+    // 3. 落锁封板并持久化至登录账号模块 A 章节进度
     session.status = 'completed';
     session.settlement = fullSettlement;
+
+    if (req.session?.userid) {
+      fullSettlement.persistedChapter = await persistAvgSettlementToChapter({
+        userId: req.session.userid,
+        chapterId: chapter,
+        settlement: fullSettlement
+      });
+    }
 
     res.json({
       success: true,
@@ -541,12 +659,84 @@ router.post('/resolve-check', async (req, res) => {
 });
 
 /**
+ * POST /api/avg-test/sync-words
+ * 将本局破局金句中的高频核心词与实战词块同步沉淀至模块 A (UserWord sence=chapter, source='avg_boss')
+ */
+router.post('/sync-words', async (req, res) => {
+  try {
+    const { sessionId: rawSessionId = 'default', chapter = 'A', words = [], takeaway = '' } = req.body || {};
+    const userId = req.session?.userid;
+
+    if (!userId) {
+      return res.json({
+        success: true,
+        data: {
+          loggedIn: false,
+          requiresLogin: true,
+          syncedCount: 0,
+          syncedWords: [],
+          message: '当前为独立试玩状态，暂未绑定学习账号；登录后结算即可永久同步至【模块 A：明日复习计划】。'
+        }
+      });
+    }
+
+    const sessionId = resolveSessionId(req, rawSessionId);
+    const session = sessions.get(sessionId);
+
+    const candidateWords = [...(Array.isArray(words) ? words : [])];
+    const effectiveTakeaway = takeaway || session?.settlement?.oneKeyTakeaway?.nativeSentence || session?.settlement?.oneKeyTakeaway?.english || '';
+
+    // 提取金句与命中词块中的核心英文实词
+    const rawTokens = [];
+    if (effectiveTakeaway) {
+      rawTokens.push(...effectiveTakeaway.toLowerCase().split(/[^a-z]+/));
+    }
+    if (session?.allWeaponsHit) {
+      Array.from(session.allWeaponsHit).forEach(phrase => {
+        rawTokens.push(...String(phrase).toLowerCase().split(/[^a-z]+/));
+      });
+    }
+
+    const bankKeywords = (getSceneWordBank(chapter) || []).map(item => item.word.toLowerCase());
+    bankKeywords.forEach(kw => {
+      if (rawTokens.includes(kw)) {
+        candidateWords.push(kw);
+      }
+    });
+
+    const syncedWords = await syncUserWordsForScene({
+      userId,
+      words: candidateWords,
+      chapter,
+      source: 'avg_boss',
+      dueNow: true
+    });
+
+    res.json({
+      success: true,
+      data: {
+        loggedIn: true,
+        requiresLogin: false,
+        chapter: String(chapter || 'A').toUpperCase(),
+        syncedCount: syncedWords.length,
+        syncedWords,
+        message: `已将 ${syncedWords.length} 个本局核心词汇同步至【模块 A：复习计划】！`
+      }
+    });
+  } catch (error) {
+    console.error('[AVG Sync Words Error]:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * POST /api/avg-test/reveal-subtitle
  * 二周目盲听模式：记录玩家点击“显露台词”次数（触发后剥夺黑金纯度认证）
  */
 router.post('/reveal-subtitle', (req, res) => {
   try {
-    const { sessionId = 'default', bubbleKey = 'unknown' } = req.body || {};
+    const { sessionId: rawSessionId = 'default', bubbleKey = 'unknown' } = req.body || {};
+    const sessionId = resolveSessionId(req, rawSessionId);
     const session = getOrCreateSession(sessionId);
     if (!session.revealedIndices.includes(bubbleKey)) {
       session.revealedIndices.push(bubbleKey);
@@ -570,7 +760,8 @@ router.post('/reveal-subtitle', (req, res) => {
  */
 router.all('/reset', (req, res) => {
   try {
-    const sessionId = req.body?.sessionId || req.query?.sessionId || 'default';
+    const rawSessionId = req.body?.sessionId || req.query?.sessionId || 'default';
+    const sessionId = resolveSessionId(req, rawSessionId);
     const runMode = req.body?.runMode || req.query?.runMode || null;
     sessions.delete(sessionId);
     if (runMode) {

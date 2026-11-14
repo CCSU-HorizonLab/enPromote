@@ -88,12 +88,18 @@ let userSchema = new mongoose.Schema({
             spellP: { type: Boolean, default: false },
             listenP: { type: Boolean, default: false },
             customsP: { type: Boolean, default: false },
-            coverP: { type: Boolean, default: false }
+            coverP: { type: Boolean, default: false },
+            // 模块 B AVG Boss 战结算与黑金盲听免修特权字段
+            avgStars: { type: Number, default: 0 },
+            avgScore: { type: Number, default: 0 },
+            avgPrestigeTier: { type: String, default: '' },
+            avgCompletedAt: { type: Date, default: null },
+            privilegeExempted: { type: Boolean, default: false }
         },
         default: function () {
             return new Map([
-                ['A', { level: 1, score: 0, completedWords: 0, wordP: false, spellP: false, listenP: false, customsP: false, coverP: false }],
-                ['B', { level: 1, score: 0, completedWords: 0, wordP: false, spellP: false, listenP: false, customsP: false, coverP: false }]
+                ['A', { level: 1, score: 0, completedWords: 0, wordP: false, spellP: false, listenP: false, customsP: false, coverP: false, avgStars: 0, avgScore: 0, avgPrestigeTier: '', avgCompletedAt: null, privilegeExempted: false }],
+                ['B', { level: 1, score: 0, completedWords: 0, wordP: false, spellP: false, listenP: false, customsP: false, coverP: false, avgStars: 0, avgScore: 0, avgPrestigeTier: '', avgCompletedAt: null, privilegeExempted: false }]
             ]);
         }
     },

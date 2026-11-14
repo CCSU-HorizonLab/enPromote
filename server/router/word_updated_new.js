@@ -13,6 +13,8 @@ const http = require('http');
 const { updateWordReviewStatus } = require('../utils/spacedRepetition');
 const StudyRecordService = require('../modules/StudyRecordService');
 const { generateAndSaveExample } = require('../ai/aliyunExampleGenerator_new');
+const { getSceneWordBank, findSceneWord } = require('../config/sceneVocabularies');
+const { ensureSceneWordDoc, buildFrontendWordPayload } = require('../utils/sceneWordSync');
 const MISSING_EXAMPLE_TEXT = '暂无例句';
 
 function isUsableExample(example) {
@@ -31,6 +33,11 @@ const CACHE_DURATION = 30 * 60 * 1000; // 30分钟
  */
 function getWordMeaningFromVocabulary(word) {
   try {
+    const sceneMatch = findSceneWord(word);
+    if (sceneMatch && sceneMatch.mean) {
+      return sceneMatch.mean;
+    }
+
     console.log(`[getWordMeaningFromVocabulary] 开始查找单词: ${word}`);
 
     // 如果缓存过期或不存在，重新加载词汇库
@@ -86,6 +93,11 @@ function getWordMeaningFromVocabulary(word) {
  */
 function getPhoneticSymbolFromVocabulary(word) {
   try {
+    const sceneMatch = findSceneWord(word);
+    if (sceneMatch && sceneMatch.phonetic_symbol) {
+      return sceneMatch.phonetic_symbol;
+    }
+
     // 如果缓存过期或不存在，重新加载词汇库
     if (!vocabularyCache || !vocabularyCacheTime || Date.now() - vocabularyCacheTime > CACHE_DURATION) {
       const vocabularyPath = path.join(__dirname, '..', 'word', 'CET-4.json');
@@ -116,7 +128,7 @@ function getPhoneticSymbolFromVocabulary(word) {
 }
 
 // 更新用户单词状态
-async function updateUserWordStatus(userId, wordId, status, isCorrect) {
+async function updateUserWordStatus(userId, wordId, status, isCorrect, sence = 'A', source = 'vocabulary') {
   try {
     // 查找用户是否已学习过该单词
     let userWord = await UserWord.findOne({
@@ -129,6 +141,8 @@ async function updateUserWordStatus(userId, wordId, status, isCorrect) {
       userWord = new UserWord({
         userId: userId,
         wordId: wordId,
+        sence: sence || 'A',
+        source: source || 'vocabulary',
         status: status || (isCorrect ? "learning" : "new"),
         reviewCounts: 1,
         firstSeenAt: new Date(),
@@ -150,7 +164,8 @@ async function updateUserWordStatus(userId, wordId, status, isCorrect) {
             reviewCounts: updatedData.reviewCounts,
             lastSeenAt: updatedData.lastSeenAt,
             nextReviewTime: updatedData.nextReviewTime,
-            priority: updatedData.priority
+            priority: updatedData.priority,
+            ...(sence ? { sence } : {})
           }
         }
       );
@@ -177,10 +192,12 @@ router.post('/submitReview', async (req, res) => {
       });
     }
 
-    const { wordId, word, newStatus } = req.body;
+    const { wordId, word, newStatus, source, sence, chapter } = req.body;
     let { isCorrect } = req.body;
     const submittedWord = typeof word === 'string' ? word.trim() : '';
     const submittedWordId = typeof wordId === 'string' ? wordId.trim() : wordId;
+    const requestedChapter = (sence || chapter) ? String(sence || chapter).trim().toUpperCase() : '';
+    const validSource = ['vocabulary', 'story', 'avg_boss'].includes(source) ? source : 'vocabulary';
 
     if (typeof isCorrect !== 'boolean' && newStatus) {
       isCorrect = ['know', 'mastered', 'learning'].includes(newStatus);
@@ -195,20 +212,35 @@ router.post('/submitReview', async (req, res) => {
 
     // 如果是直接传入单词字符串而不是wordId，需要先查找Word模型获取ID
     let actualWordId = submittedWordId || submittedWord;
+    let resolvedWordDoc = null;
     if (typeof actualWordId === 'string' && !actualWordId.match(/^[0-9a-fA-F]{24}$/)) {
-      const wordDoc = await Word.findOne({ word: actualWordId });
-      if (wordDoc) {
-        actualWordId = wordDoc._id.toString();
+      const sceneMatch = findSceneWord(actualWordId, requestedChapter || null);
+      if (sceneMatch) {
+        resolvedWordDoc = await ensureSceneWordDoc(sceneMatch, sceneMatch.chapter);
+        actualWordId = resolvedWordDoc._id.toString();
       } else {
-        // 如果找不到单词，创建一个新记录
-        const newWord = new Word({
-          word: actualWordId,
-          chineseMeaning: ''
-        });
-        await newWord.save();
-        actualWordId = newWord._id.toString();
+        const wordDoc = await Word.findOne({ word: actualWordId });
+        if (wordDoc) {
+          resolvedWordDoc = wordDoc;
+          actualWordId = wordDoc._id.toString();
+        } else {
+          // 如果找不到单词，创建一个新记录
+          const newWord = new Word({
+            word: actualWordId,
+            chineseMeaning: '',
+            chapter: requestedChapter || 'A',
+            scenario: requestedChapter === 'A' ? 'hotel' : 'vocabulary'
+          });
+          await newWord.save();
+          resolvedWordDoc = newWord;
+          actualWordId = newWord._id.toString();
+        }
       }
+    } else if (actualWordId) {
+      resolvedWordDoc = await Word.findById(actualWordId);
     }
+
+    const resolvedSence = requestedChapter || resolvedWordDoc?.chapter || findSceneWord(submittedWord)?.chapter || 'A';
 
     // 确定状态
     let status = newStatus;
@@ -221,7 +253,7 @@ router.post('/submitReview', async (req, res) => {
     }
 
     // 更新单词状态
-    await updateUserWordStatus(userid, actualWordId, status, isCorrect);
+    await updateUserWordStatus(userid, actualWordId, status, isCorrect, resolvedSence, validSource);
 
     logUserAction(req, 'SUBMIT_REVIEW', {
       userId: userid,
@@ -256,21 +288,67 @@ router.get('/getReviewWords', async (req, res) => {
       });
     }
 
+    const requestedChapter = req.query.chapter ? String(req.query.chapter).trim().toUpperCase() : '';
+    const sceneWordBank = requestedChapter ? getSceneWordBank(requestedChapter) : null;
+
     // 获取今天需要复习的单词（nextReviewTime <= 当前时间）
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // 查询需要复习的单词
-    const reviewWords = await UserWord.find({
-      userId: userid,
-      nextReviewTime: {
-        $lte: tomorrow
+    let reviewWords = [];
+    if (sceneWordBank) {
+      const scenarioKey = requestedChapter === 'A' ? 'hotel' : 'vocabulary';
+      const bankWordsLower = sceneWordBank.map(item => item.word.toLowerCase());
+      const allowedWordDocs = await Word.find({
+        $or: [
+          { chapter: requestedChapter, scenario: scenarioKey },
+          { word: { $in: bankWordsLower } }
+        ]
+      });
+      const allowedIds = allowedWordDocs.map(doc => doc._id.toString());
+
+      // 优先提取今日到期的本场景单词（含模块 B 回流的高优先级单词）
+      const dueSceneWords = await UserWord.find({
+        userId: userid,
+        sence: requestedChapter,
+        wordId: { $in: allowedIds },
+        nextReviewTime: { $lte: tomorrow }
+      })
+      .sort({ priority: -1, nextReviewTime: 1 })
+      .limit(20);
+
+      reviewWords = [...dueSceneWords];
+
+      // 若到期单词不足，补充同场景已学/回流单词，保证第3关听力可立即练习本场景核心词
+      if (reviewWords.length < 20) {
+        const pickedIds = reviewWords.map(item => item._id);
+        const extraSceneWords = await UserWord.find({
+          userId: userid,
+          sence: requestedChapter,
+          wordId: { $in: allowedIds },
+          _id: { $nin: pickedIds }
+        })
+        .sort({ priority: -1, lastSeenAt: -1 })
+        .limit(20 - reviewWords.length);
+        reviewWords = [...reviewWords, ...extraSceneWords];
       }
-    })
-    .sort({ nextReviewTime: 1 })
-    .limit(20); // 限制每次复习的单词数量
+    } else {
+      const baseQuery = {
+        userId: userid,
+        nextReviewTime: {
+          $lte: tomorrow
+        }
+      };
+      if (requestedChapter) {
+        baseQuery.sence = requestedChapter;
+      }
+      // 查询需要复习的单词
+      reviewWords = await UserWord.find(baseQuery)
+      .sort({ nextReviewTime: 1 })
+      .limit(20); // 限制每次复习的单词数量
+    }
 
     // 获取单词详细信息
     const wordIds = reviewWords.map(item => item.wordId);
@@ -382,7 +460,21 @@ router.get('/getReviewWords', async (req, res) => {
       };
     }));
 
-    logUserAction(req, 'GET_REVIEW_WORDS', { userId: userid, count: formattedWords.length });
+    // 若场景复习池仍不足（如首次体验第3关），从精选场景词库自动水合补足
+    if (sceneWordBank && formattedWords.length < 12) {
+      const existingWordSet = new Set(formattedWords.map(item => String(item.word || '').toLowerCase()));
+      for (const sceneItem of sceneWordBank) {
+        if (formattedWords.length >= 20) break;
+        if (existingWordSet.has(sceneItem.word.toLowerCase())) continue;
+        const wordDoc = await ensureSceneWordDoc(sceneItem, requestedChapter);
+        if (wordDoc) {
+          formattedWords.push(buildFrontendWordPayload(wordDoc, sceneItem));
+          existingWordSet.add(wordDoc.word.toLowerCase());
+        }
+      }
+    }
+
+    logUserAction(req, 'GET_REVIEW_WORDS', { userId: userid, count: formattedWords.length, chapter: requestedChapter || 'all' });
 
     // 记录返回给前端的数据
     console.log('返回给前端的复习单词数据:', formattedWords.map(w => ({
@@ -511,6 +603,38 @@ router.get('/getWordList', async (req, res) => {
     const { chapter } = req.query; // 新增：章节参数 A, B, C...
     let letter = req.query.chapter;
     let index = req.query.index;
+
+    const requestedChapter = chapter ? String(chapter).trim().toUpperCase() : '';
+    const sceneWordBank = requestedChapter ? getSceneWordBank(requestedChapter) : null;
+
+    if (sceneWordBank) {
+      const planStudyWord = 20;
+      const rawStartIdx = index ? parseInt(index, 10) || 0 : 0;
+      const startIdx = rawStartIdx >= sceneWordBank.length ? 0 : Math.max(0, rawStartIdx);
+      const endIdx = Math.min(startIdx + planStudyWord, sceneWordBank.length);
+
+      const wordsToReturn = await Promise.all(
+        sceneWordBank.slice(startIdx, endIdx).map(async (sceneItem) => {
+          const wordDoc = await ensureSceneWordDoc(sceneItem, requestedChapter);
+          return buildFrontendWordPayload(wordDoc, sceneItem);
+        })
+      );
+
+      console.log(`返回精选场景词库 (章节=${requestedChapter}): ${wordsToReturn.length}个单词`);
+
+      return res.json({
+        code: 200,
+        data: {
+          words: wordsToReturn,
+          wordListLen: wordsToReturn.length,
+          total: sceneWordBank.length,
+          currentIndex: startIdx,
+          hasMore: endIdx < sceneWordBank.length,
+          chapter: requestedChapter,
+          mode: 'scene'
+        }
+      });
+    }
 
     console.log(`请求获取单词列表: 章节=${chapter}, 字母=${letter}, 索引=${index}`);
     console.log(`用户ID: ${req.session.userid}`);

@@ -92,11 +92,12 @@ function submitWordReview(data: WordPriorityData): Promise<ApiResponse> {
     });
 }
 
-// 获取需要复习的单词
-function getReviewWords(): Promise<ApiResponse> {
+// 获取需要复习的单词（支持按章节筛选）
+function getReviewWords(params?: { chapter?: string }): Promise<ApiResponse> {
     return request({
         url: '/word/getReviewWords',
         method: 'get',
+        params,
     });
 }
 

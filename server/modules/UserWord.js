@@ -44,8 +44,8 @@ let userWordSchema = new mongoose.Schema({
     },
     source: {
         type: String,
-        default: 'vocabulary', // 默认来源是词汇练习，其他可能的值：story(情景模式)
-        enum: ['vocabulary', 'story']
+        default: 'vocabulary', // 默认来源是词汇练习，其他可能的值：story(情景模式)、avg_boss(模块B实战回流)
+        enum: ['vocabulary', 'story', 'avg_boss']
     }
 });
 userWordSchema.index({ userId: 1, wordId: 1 }, { unique: true });

@@ -8,6 +8,8 @@ const { OpenAI } = require('openai');
 const { apiKey, baseUrl } = require('../config/serve');
 const aliyunConfig = require('../config/aliyun');
 const { logger } = require('../utils/logger');
+const { getSceneWordBank } = require('../config/sceneVocabularies');
+const { ensureSceneWordDoc } = require('../utils/sceneWordSync');
 const crypto = require('crypto');
 
 // 题目去重辅助函数 - 生成题目内容的哈希值
@@ -295,23 +297,32 @@ router.post('/generate', async (req, res) => {
       });
     }
 
-    // 获取用户已学词汇（优先级最高的10个单词）
-    const userWords = await UserWord
-      .find({ userId: userid })
-      .sort({ priority: -1 })
-      .limit(10);
+    const normalizedChapter = String(chapter || '').trim().toUpperCase();
+    const sceneWordBank = getSceneWordBank(normalizedChapter);
 
-    if (userWords.length === 0) {
-      return res.json({
-        code: 400,
-        message: '请先学习一些单词再进行练习'
-      });
+    // 按当前章节获取用户已学词汇（优先级最高的10个单词）
+    const userWordQuery = { userId: userid };
+    if (normalizedChapter) {
+      userWordQuery.sence = normalizedChapter;
     }
 
-    // 获取单词详细信息
-    const wordList = await Promise.all(userWords.map(async (userWord) => {
+    const userWords = await UserWord
+      .find(userWordQuery)
+      .sort({ priority: -1, lastSeenAt: -1 })
+      .limit(20);
+
+    // 获取单词详细信息，并在场景模式（如酒店章 A）过滤掉历史遗留的非本场景词（如 CET-4 词汇）
+    const resolvedWords = await Promise.all(userWords.map(async (userWord) => {
       const word = await Word.findById(userWord.wordId);
       if (!word) return null;
+      if (sceneWordBank) {
+        const expectedScenario = normalizedChapter === 'A' ? 'hotel' : null;
+        const inBank = sceneWordBank.some(item => item.word === String(word.word || '').toLowerCase());
+        const matchesScenario = expectedScenario ? word.scenario === expectedScenario : true;
+        if (!inBank && !matchesScenario) {
+          return null;
+        }
+      }
       return {
         wordId: word._id.toString(),
         word: word.word,
@@ -319,7 +330,32 @@ router.post('/generate', async (req, res) => {
       };
     }));
 
-    const validWordList = wordList.filter(w => w !== null);
+    const validWordList = resolvedWords.filter(w => w !== null).slice(0, 10);
+
+    // 若场景词汇不足，自动用当前章节精选场景词库补全，避免无记录或旧数据阻断第4关训练
+    if (sceneWordBank && validWordList.length < 6) {
+      const existingSet = new Set(validWordList.map(w => w.word.toLowerCase()));
+      for (const sceneItem of sceneWordBank) {
+        if (validWordList.length >= 10) break;
+        if (existingSet.has(sceneItem.word.toLowerCase())) continue;
+        const wordDoc = await ensureSceneWordDoc(sceneItem, normalizedChapter);
+        if (wordDoc) {
+          validWordList.push({
+            wordId: wordDoc._id.toString(),
+            word: wordDoc.word,
+            meaning: sceneItem.mean || wordDoc.chineseMeaning || ''
+          });
+          existingSet.add(wordDoc.word.toLowerCase());
+        }
+      }
+    }
+
+    if (validWordList.length === 0) {
+      return res.json({
+        code: 400,
+        message: '请先学习一些单词再进行练习'
+      });
+    }
 
     // 获取章节场景信息
     const chapterConfig = require('../config/chapters').CHAPTERS[chapter];

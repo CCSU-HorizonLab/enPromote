@@ -422,8 +422,9 @@ const generateQuestions = async () => {
     })
 
     const data = await response.json()
+    const isSuccess = Boolean(data && (data.success === true || data.code === 200 || data.code === 'SUCCESS'))
 
-    if (data.code === 200) {
+    if (isSuccess) {
       // 处理阿里云百炼返回的数据结构
       audioScript.value = ''
       
@@ -440,7 +441,7 @@ const generateQuestions = async () => {
       // 通知父组件题目已生成，用于存储
       emit('questionsGenerated', {
         data: data.data,
-        chapter: data.chapter || props.positionType,
+        chapter: data.data?.chapter || data.chapter || props.positionType,
         timestamp: Date.now()
       })
 

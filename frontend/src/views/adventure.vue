@@ -69,15 +69,45 @@
         </div>
       </section>
 
-      <section class="story-unlock" :class="{ unlocked: isChapterCompleted }">
+      <section class="story-unlock" :class="{ unlocked: isChapterCompleted, 'black-gold-unlocked': chapterAvgInfo.privilegeExempted }">
         <div>
-          <span class="eyebrow">{{ isChapterCompleted ? '角色剧情已解锁' : '剧情挑战' }}</span>
-          <h2>{{ isChapterCompleted ? '进入角色剧情实战' : '完成实战对话后解锁剧情挑战' }}</h2>
-          <p>{{ isChapterCompleted ? '把刚练过的词汇、听力和表达放进完整剧情里使用。' : '角色剧情是主线训练后的应用奖励，不和基础关卡抢入口。' }}</p>
+          <span class="eyebrow">
+            {{
+              chapterAvgInfo.privilegeExempted
+                ? '🏅 黑金盲听免修特权已激活'
+                : (isChapterCompleted ? (isHotelAvgChapter ? 'Boss 实战已解锁' : '角色剧情已解锁') : '剧情挑战')
+            }}
+          </span>
+          <h2>
+            {{
+              isHotelAvgChapter
+                ? (isChapterCompleted ? '进入 Arthur 前台 Boss 实战（模块 B）' : '完成实战对话后解锁酒店 Boss 实战')
+                : (isChapterCompleted ? '进入角色剧情实战' : '完成实战对话后解锁剧情挑战')
+            }}
+          </h2>
+          <p v-if="isHotelAvgChapter">
+            {{
+              chapterAvgInfo.avgStars > 0
+                ? `当前 Boss 最高纪录：⭐ ${chapterAvgInfo.avgStars}/3 星（${chapterAvgInfo.avgScore || 0} 分）· 破局词汇可一键同步至复习池。`
+                : (isChapterCompleted ? '把刚练过的酒店核心词汇（reservation / complimentary upgrade）放进与 Arthur 的 3 回合真实博弈。' : '角色剧情是主线训练后的应用奖励；若自信口语听力，也可直接挑战二周目盲听赢黑金免修。')
+            }}
+          </p>
+          <p v-else>{{ isChapterCompleted ? '把刚练过的词汇、听力和表达放进完整剧情里使用。' : '角色剧情是主线训练后的应用奖励，不和基础关卡抢入口。' }}</p>
         </div>
-        <button class="learn-button primary" :disabled="!isChapterCompleted" @click="goToStory">
-          {{ isChapterCompleted ? '进入剧情挑战' : '尚未解锁' }}
-        </button>
+        <div class="story-unlock-actions">
+          <button
+            v-if="isHotelAvgChapter"
+            class="learn-button secondary"
+            type="button"
+            @click="goToHotelNgPlus"
+            title="挑战二周目午夜电话盲听，0 显露台词拿 3 星即解锁模块 A 免修特权"
+          >
+            📞 二周目盲听定级
+          </button>
+          <button class="learn-button primary" :disabled="!isChapterCompleted" @click="goToStory">
+            {{ isChapterCompleted ? (isHotelAvgChapter ? '进入 Boss 实战' : '进入剧情挑战') : '尚未解锁' }}
+          </button>
+        </div>
       </section>
     </div>
 
@@ -515,6 +545,12 @@ const currentChapterMeta = computed(() => {
 
 const isChapterCompleted = computed(() => completedLevels.value >= levelSteps.length)
 
+const chapterAvgInfo = computed(() => {
+  return userInfo.value?.chapters?.[currentChapterId.value] || {}
+})
+
+const isHotelAvgChapter = computed(() => currentChapterId.value === 'A')
+
 const nextPlayableLevel = computed(() => {
   if (!userInfo.value) return levelSteps[0]
   return levelSteps.find(step => !isLevelCompleted(step.key) && isLevelUnlocked(step.key)) || levelSteps[levelSteps.length - 1]
@@ -608,17 +644,20 @@ const backToMap = () => {
   resetVocabularyPractice()
 }
 
+// 兼容 apiResponseMiddleware 包装后的响应 ({ success: true, code: 'SUCCESS' }) 与原始 { code: 200 }
+const isApiSuccess = (payload) => Boolean(payload && (payload.success === true || payload.code === 200 || payload.code === 'SUCCESS'))
+
 const startVocabularyPractice = async () => {
   try {
     // 使用当前章节获取单词列表
-    const currentChapter = userInfo.value.currentChapter || 'A'
+    const activeChapter = currentChapterId.value
     
     // 获取用户当前的学习进度
     const progressResponse = await fetch('/api/word/getWordProgress')
     const progressData = await progressResponse.json()
     
     let startIndex = 0
-    if (progressData.code === 200 && progressData.data) {
+    if (isApiSuccess(progressData) && progressData.data) {
       // 从用户进度中解析当前字母和索引
       const position = progressData.data
       const parts = position.split(':')
@@ -628,18 +667,18 @@ const startVocabularyPractice = async () => {
     }
     
     // 获取单词列表，使用当前进度作为起始索引
-    const response = await fetch(`/api/word/getWordList?chapter=${currentChapter}&index=${startIndex}`)
+    const response = await fetch(`/api/word/getWordList?chapter=${activeChapter}&index=${startIndex}`)
     const data = await response.json()
 
-    if (data.code === 200) {
-      vocabularyWords.value = data.data.words || []
+    if (isApiSuccess(data)) {
+      vocabularyWords.value = data.data?.words || []
       
       // 如果获取的单词为空，使用index=0再尝试一次
       if (vocabularyWords.value.length === 0) {
-        const fallbackResponse = await fetch(`/api/word/getWordList?chapter=${currentChapter}&index=0`)
+        const fallbackResponse = await fetch(`/api/word/getWordList?chapter=${activeChapter}&index=0`)
         const fallbackData = await fallbackResponse.json()
-        if (fallbackData.code === 200) {
-          vocabularyWords.value = fallbackData.data.words || []
+        if (isApiSuccess(fallbackData)) {
+          vocabularyWords.value = fallbackData.data?.words || []
         }
       }
       
@@ -650,9 +689,13 @@ const startVocabularyPractice = async () => {
       vagueWords.value = 0
       unknownWords.value = 0
       currentView.value = 'level-wordP'
+    } else {
+      console.error('获取单词列表失败:', data?.message || data)
+      toast.error(data?.message || '获取单词列表失败，请稍后重试')
     }
   } catch (error) {
     console.error('获取单词列表失败:', error)
+    toast.error('获取单词列表失败，请检查网络连接')
   }
 }
 
@@ -666,22 +709,26 @@ const resetVocabularyPractice = () => {
 const startSpellingPractice = async () => {
   try {
     // 使用当前章节获取单词列表
-    const currentChapter = userInfo.value.currentChapter || 'A'
+    const activeChapter = currentChapterId.value
 
     // 获取单词列表（复用词汇练习的单词）
-    const response = await fetch(`/api/word/getWordList?chapter=${currentChapter}&index=0`)
+    const response = await fetch(`/api/word/getWordList?chapter=${activeChapter}&index=0`)
     const data = await response.json()
 
-    if (data.code === 200) {
-      spellingWords.value = data.data.words || []
+    if (isApiSuccess(data)) {
+      spellingWords.value = data.data?.words || []
       showSpellingComplete.value = false
       correctSpellings.value = 0
       incorrectSpellings.value = 0
       spellingStartTime.value = new Date()
       currentView.value = 'level-spellP'
+    } else {
+      console.error('获取拼写单词列表失败:', data?.message || data)
+      toast.error(data?.message || '获取拼写单词列表失败，请稍后重试')
     }
   } catch (error) {
     console.error('获取拼写单词列表失败:', error)
+    toast.error('获取拼写单词列表失败，请检查网络连接')
   }
 }
 
@@ -757,7 +804,7 @@ const handleVocabularyComplete = async (stats) => {
     const progressData = await progressResponse.json()
     console.log('获取到的学习进度数据:', progressData)
 
-    if (progressData.code === 200 && progressData.data) {
+    if (isApiSuccess(progressData) && progressData.data) {
       // 解析当前位置
       const position = progressData.data
       const parts = position.split(':')
@@ -790,7 +837,7 @@ const handleVocabularyComplete = async (stats) => {
         const updateData = await updateResponse.json()
         console.log('更新学习进度响应数据:', updateData)
         
-        if (updateData.code === 200) {
+        if (isApiSuccess(updateData)) {
           console.log('学习进度更新成功')
         } else {
           console.error('学习进度更新失败:', updateData.message)
@@ -857,7 +904,7 @@ const startAIQuestionPreload = async () => {
 
     console.log('AI题目生成响应:', data)
 
-    if (data.code === 200) {
+    if (isApiSuccess(data)) {
       // 存储预加载的题目
       preloadedAIQuestions.value = data.data
       isAIQuestionsPreloaded.value = true
@@ -969,42 +1016,24 @@ const handleSpellingIncorrect = (index) => {
 
 }
 
-const startListeningPractice = async () => {
-  try {
-    // 获取需要听力练习的单词
-    const { data } = await getReviewWords()
+const HOTEL_LISTENING_FALLBACK = [
+  { word: "reservation", mean: "n. 预订；预约" },
+  { word: "confirmation", mean: "n. 确认号；确认书" },
+  { word: "passport", mean: "n. 护照" },
+  { word: "complimentary", mean: "adj. 免费赠送的；礼遇的" },
+  { word: "upgrade", mean: "v./n. 升级（房型或服务）" },
+  { word: "reception", mean: "n. 前台接待处" },
+  { word: "concierge", mean: "n. 礼宾员；礼宾部" },
+  { word: "deposit", mean: "n. 押金；保证金" },
+  { word: "suite", mean: "n. 套房" },
+  { word: "checkout", mean: "n. 退房结账" }
+]
 
-    if (data.code === 200) {
-      // 限制听力练习单词数量，最多20个
-      const words = data.data.words || []
-      listeningWords.value = words.slice(0, 20)
-      
-      // 如果API返回的单词为空，使用示例单词
-      if (listeningWords.value.length === 0) {
-        listeningWords.value = [
-          { word: "hello", mean: "你好" },
-          { word: "world", mean: "世界" },
-          { word: "apple", mean: "苹果" },
-          { word: "computer", mean: "电脑" },
-          { word: "language", mean: "语言" },
-          { word: "practice", mean: "练习" },
-          { word: "listen", mean: "听" },
-          { word: "speak", mean: "说" },
-          { word: "read", mean: "读" },
-          { word: "write", mean: "写" }
-        ]
-      }
-      
-      showListeningComplete.value = false
-      listeningStats.value = { total: 0, correct: 0, accuracy: 0 }
-      listeningStartTime.value = new Date()
-      currentView.value = 'level-listenP'
-    }
-  } catch (error) {
-    console.error('获取听力单词列表失败:', error)
-    
-    // 如果API调用失败，使用示例单词
-    listeningWords.value = [
+const startListeningPractice = async () => {
+  const activeChapter = currentChapterId.value
+  const getFallbackWords = () => {
+    if (activeChapter === 'A') return HOTEL_LISTENING_FALLBACK
+    return [
       { word: "hello", mean: "你好" },
       { word: "world", mean: "世界" },
       { word: "apple", mean: "苹果" },
@@ -1016,6 +1045,32 @@ const startListeningPractice = async () => {
       { word: "read", mean: "读" },
       { word: "write", mean: "写" }
     ]
+  }
+
+  try {
+    // 获取需要听力练习的单词（按当前章节筛选场景词）
+    const { data } = await getReviewWords({ chapter: activeChapter })
+
+    if (data.code === 200) {
+      // 限制听力练习单词数量，最多20个
+      const words = data.data.words || []
+      listeningWords.value = words.slice(0, 20)
+      
+      // 如果API返回的单词为空，使用当前场景兜底词库
+      if (listeningWords.value.length === 0) {
+        listeningWords.value = getFallbackWords()
+      }
+      
+      showListeningComplete.value = false
+      listeningStats.value = { total: 0, correct: 0, accuracy: 0 }
+      listeningStartTime.value = new Date()
+      currentView.value = 'level-listenP'
+    }
+  } catch (error) {
+    console.error('获取听力单词列表失败:', error)
+    
+    // 如果API调用失败，使用当前场景兜底词库
+    listeningWords.value = getFallbackWords()
     
     showListeningComplete.value = false
     listeningStats.value = { total: 0, correct: 0, accuracy: 0 }
@@ -1296,7 +1351,21 @@ const startNextLevel = () => {
 
 const goToStory = () => {
   if (!isChapterCompleted.value) return
+  if (currentChapterId.value === 'A') {
+    router.push({
+      path: '/avg-test',
+      query: { scenarioId: 'scenario_hotel_01', chapter: 'A', from: 'adventure' }
+    })
+    return
+  }
   router.push('/story')
+}
+
+const goToHotelNgPlus = () => {
+  router.push({
+    path: '/avg-test',
+    query: { scenarioId: 'scenario_hotel_01', chapter: 'A', runMode: 'ng_plus', from: 'adventure' }
+  })
 }
 
 const goToReviewReport = () => {
@@ -2387,5 +2456,17 @@ onMounted(async () => {
   .mini-progress {
     width: fit-content;
   }
+}
+
+.story-unlock-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.story-unlock.black-gold-unlocked {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: linear-gradient(135deg, rgba(254, 243, 199, 0.55), rgba(255, 255, 255, 0.92));
 }
 </style>

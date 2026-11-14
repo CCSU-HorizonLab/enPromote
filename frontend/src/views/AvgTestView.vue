@@ -3,6 +3,9 @@
     <!-- 顶部状态栏 -->
     <header class="top-nav">
       <div class="nav-brand">
+        <button class="btn-back-module" @click="goBackToModuleA" title="返回模块 A 词汇/听力/AI题训练台">
+          {{ backTargetLabel }}
+        </button>
         <span class="badge-tag" :class="{ 'ng-badge-tag': runMode === 'ng_plus' }">
           {{ runMode === 'ng_plus' ? '📞 NG+ 二周目盲听挑战 · 3 回合' : 'AVG 语用沙盘 · 3 回合短平快博弈' }}
         </span>
@@ -148,22 +151,24 @@
 
       <!-- 右栏：对话推进舞台与行动区 -->
       <section class="stage-section">
-        <!-- 关卡通关目标条与阶段节奏提示 (防一回杀节奏锁) -->
+        <!-- 关卡通关目标条与阶段节奏提示 (紧凑两行布局，保证下方对话视窗宽敞不被遮挡) -->
         <div class="objective-banner" :class="{ 'ng-objective-banner': runMode === 'ng_plus' }">
-          <div class="target-flag">
-            {{ runMode === 'ng_plus' ? '📞 二周目任务 · 午夜来电盲听拆招' : '🎯 任务目标' }}
-          </div>
-          <p v-if="runMode === 'ng_plus'">
-            你正在通过越洋/内线电话与 Arthur 紧急核对订单。对方台词默认开启<strong>音浪盲听遮罩</strong>，且随机触发了<strong>隐藏突发变故</strong>——请专注听清后临场回应（0 次显露台词拿 3 星即可解锁黑金印记！）。
-          </p>
-          <p v-else>{{ scenarioData.objectiveDescription }}</p>
-          <div class="ng-blind-status-row" v-if="runMode === 'ng_plus' && !isCompleted">
-            <span class="ng-status-chip" :class="subtitleRevealedCount === 0 ? 'chip-gold' : 'chip-warn'">
-              {{ subtitleRevealedCount === 0 ? '🎧 纯盲听保持中 (0 显露 · 黑金资格有效)' : `👁️ 已显露台词 ${subtitleRevealedCount} 次 (黑金资格已失去)` }}
+          <div class="objective-top-row">
+            <span class="target-flag">
+              {{ runMode === 'ng_plus' ? '📞 二周目·午夜盲听' : '🎯 任务目标' }}
             </span>
-            <span class="ng-status-chip" :class="twistAddressed ? 'chip-ok' : 'chip-pending'">
-              {{ twistAddressed ? '✅ 已侦测到你正面回应来电变故' : '⚠️ 待听清并正面拆解来电突发问题' }}
-            </span>
+            <p class="objective-text" v-if="runMode === 'ng_plus'">
+              听清来电突发状况并临场拆招 · 全程 0 显露台词拿 3★ 解锁黑金
+            </p>
+            <p class="objective-text" v-else>{{ scenarioData.objectiveDescription }}</p>
+            <div class="ng-blind-status-row" v-if="runMode === 'ng_plus' && !isCompleted">
+              <span class="ng-status-chip" :class="subtitleRevealedCount === 0 ? 'chip-gold' : 'chip-warn'">
+                {{ subtitleRevealedCount === 0 ? '🎧 0 显露 · 黑金有效' : `👁️ 已显露 ${subtitleRevealedCount} 次` }}
+              </span>
+              <span class="ng-status-chip" :class="twistAddressed ? 'chip-ok' : 'chip-pending'">
+                {{ twistAddressed ? '✅ 已回应变故' : '⚠️ 待破来电变故' }}
+              </span>
+            </div>
           </div>
           <div class="pacing-pill" :class="pacingInfo.phase" v-if="!isCompleted">
             <span class="pacing-badge">{{ pacingInfo.label }}</span>
@@ -173,8 +178,20 @@
 
         <!-- 对话历史回放区 -->
         <div class="chat-viewport" ref="chatViewportRef">
+          <!-- 二周目盲听：先点击接听开始，再播放第 1 句 -->
+          <div v-if="runMode === 'ng_plus' && !ngCallStarted" class="ng-incoming-call-card">
+            <div class="incoming-ring-badge">📞 午夜内线来电待接听...</div>
+            <h3>{{ scenarioData.npc.name }} 经理正在连线</h3>
+            <p>
+              本局为<strong>二周目纯盲听挑战</strong>（含随机隐藏突发变故）。请戴好耳机或调高音量，准备就绪后点击下方按钮接听并收听第 1 句来电！
+            </p>
+            <button class="btn-start-blind-call" @click="startNgPlusCall">
+              🎧 点击接听并开始盲听（播放第 1 句）
+            </button>
+          </div>
+
           <!-- 开场白 -->
-          <div class="chat-row npc-row">
+          <div v-else class="chat-row npc-row">
             <div class="bubble npc-bubble" :class="{ 'speaking-bubble': isPlayingVoice('opening'), 'masked-bubble': isBubbleMasked('opening') }">
               <div class="bubble-header-row">
                 <span class="speaker">{{ scenarioData.npc.name }} <small v-if="runMode === 'ng_plus'" class="call-tag">📞 午夜内线</small></span>
@@ -319,6 +336,9 @@
               <div class="priv-body">
                 <strong>🎁 实战免修特权已激活 (Module A Linkage)</strong>
                 <p>{{ settlementData.privilegeUnlocked.description }}</p>
+                <span v-if="settlementData.persistedChapter?.privilegeExempted" class="priv-persisted-tag">
+                  ✅ 已永久写入账号档案：模块 A【酒店场景】全关免修直通已点亮
+                </span>
               </div>
             </div>
 
@@ -414,9 +434,19 @@
               </div>
               <p class="takeaway-sentence">"{{ settlementData.oneKeyTakeaway.nativeSentence }}"</p>
               <p class="takeaway-note">{{ settlementData.oneKeyTakeaway.usageNote }}</p>
-              <button class="btn-deck-sync" @click="handleSyncDeck" :disabled="isSynced">
-                {{ isSynced ? '✅ 已沉淀同步至模块 A 复习词库' : '🎙️ 跟读挑战并同步入库' }}
+              <button class="btn-deck-sync" @click="handleSyncDeck" :disabled="isSynced || isSyncingDeck">
+                {{
+                  isSyncingDeck
+                    ? '⏳ 正在同步入库...'
+                    : (isSynced ? '✅ 已沉淀同步至模块 A 复习词库' : '🎙️ 将本局核心词同步入模块 A 复习池')
+                }}
               </button>
+              <div v-if="syncFeedback" class="sync-feedback-box" :class="{ guest: syncFeedback.requiresLogin }">
+                <p>{{ syncFeedback.message }}</p>
+                <div v-if="syncFeedback.words.length > 0" class="synced-word-chips">
+                  <span v-for="w in syncFeedback.words" :key="w" class="synced-chip">+ {{ w }}</span>
+                </div>
+              </div>
             </div>
 
             <div class="receipt-actions">
@@ -435,12 +465,20 @@
               >
                 👔 返回一周目·面谈模式
               </button>
+              <button class="btn-ghost" @click="goBackToModuleA">
+                {{ backTargetLabel }}
+              </button>
             </div>
           </div>
         </div>
 
-        <!-- 战术行动区：三色卡牌态势流 vs Speak 自由开火流 -->
+        <!-- 战术行动区：二周目未接听时收起为紧凑待机条；接听后展示卡牌/Speak模式 -->
         <div class="tactical-action-dock" v-if="!isCompleted">
+          <div v-if="runMode === 'ng_plus' && !ngCallStarted" class="ng-awaiting-call-dock">
+            <span>📵 午夜来电尚未接听 — 请先点击上方【🎧 点击接听并开始盲听】听清第 1 句后再开口或输入</span>
+            <button class="btn-start-blind-mini" @click="startNgPlusCall">🎧 立即接听</button>
+          </div>
+          <template v-else>
           <!-- 回合与阶段指示条 -->
           <div class="dock-control-header">
             <div class="dch-left">
@@ -567,6 +605,7 @@
               </button>
             </div>
           </div>
+          </template>
         </div>
 
         <div v-else class="completed-lock-panel">
@@ -673,6 +712,18 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+
+const route = useRoute();
+const router = useRouter();
+
+const activeChapter = computed(() => String(route.query.chapter || 'A').toUpperCase());
+const entryFrom = computed(() => String(route.query.from || ''));
+const backTargetLabel = computed(() => (entryFrom.value === 'chapters' ? '← 返回闯关大厅' : '← 返回模块 A 训练台'));
+
+function goBackToModuleA() {
+  router.push(entryFrom.value === 'chapters' ? '/chapters' : '/adventure');
+}
 
 const scenarioData = ref<any>(null);
 const currentRound = ref(0);
@@ -682,6 +733,8 @@ const loading = ref(false);
 const isResolving = ref(false);
 const isCompleted = ref(false);
 const isSynced = ref(false);
+const isSyncingDeck = ref(false);
+const syncFeedback = ref<{ message: string; words: string[]; requiresLogin?: boolean } | null>(null);
 const showDossierModal = ref(false);
 const chatViewportRef = ref<HTMLElement | null>(null);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
@@ -702,6 +755,7 @@ function showToast(msg: string) {
 
 // 确定性天平与二周目盲听挑战状态
 const runMode = ref<'standard' | 'ng_plus'>('standard');
+const ngCallStarted = ref(false);
 const activeTwist = ref<any>(null);
 const revealedBubbles = ref<string[]>([]);
 const subtitleRevealedCount = ref(0);
@@ -710,6 +764,17 @@ const liveScore = ref(15);
 const factsVerified = ref<string[]>([]);
 const weaponsHit = ref<string[]>([]);
 const settlementData = ref<any>(null);
+
+function startNgPlusCall() {
+  ngCallStarted.value = true;
+  if (!ttsEnabled.value) {
+    ttsEnabled.value = true;
+    localStorage.setItem('avg_tts_enabled', 'true');
+  }
+  if (scenarioData.value?.openingLine) {
+    playSpeech(scenarioData.value.openingLine, 'opening');
+  }
+}
 
 function isBubbleMasked(bubbleKey: string) {
   if (runMode.value !== 'ng_plus') return false;
@@ -783,6 +848,13 @@ function stopCurrentAudio() {
     }
     currentAudio = null;
   }
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {
+      // ignore
+    }
+  }
   currentPlayingKey.value = null;
 }
 
@@ -818,12 +890,12 @@ async function playSpeech(text: string, key: string, preloadedAudio?: string) {
         audioCacheMap.set(text, audioUrl);
       } else {
         // Fallback: 浏览器原生 SpeechSynthesis 兜底朗读
-        speakWithBrowser(text);
+        speakWithBrowser(text, key);
         return;
       }
     } catch (e: any) {
       console.warn('TTS request fallback to browser:', e);
-      speakWithBrowser(text);
+      speakWithBrowser(text, key);
       return;
     } finally {
       loadingVoiceKey.value = null;
@@ -853,22 +925,38 @@ async function playSpeech(text: string, key: string, preloadedAudio?: string) {
     } catch (err: any) {
       console.warn('Playback error, falling back to speech synthesis:', err);
       currentPlayingKey.value = null;
-      speakWithBrowser(text);
+      speakWithBrowser(text, key);
     }
   }
 }
 
 // 浏览器 Web Speech API 原生发音兜底
-function speakWithBrowser(text: string) {
+function speakWithBrowser(text: string, key?: string) {
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     try {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'en-GB';
       utterance.rate = 0.95;
+      if (key) {
+        currentPlayingKey.value = key;
+        utterance.onend = () => {
+          if (currentPlayingKey.value === key) {
+            currentPlayingKey.value = null;
+          }
+        };
+        utterance.onerror = () => {
+          if (currentPlayingKey.value === key) {
+            currentPlayingKey.value = null;
+          }
+        };
+      }
       window.speechSynthesis.speak(utterance);
     } catch (e) {
       console.warn('Browser speech synthesis error:', e);
+      if (key && currentPlayingKey.value === key) {
+        currentPlayingKey.value = null;
+      }
     }
   }
 }
@@ -1001,6 +1089,7 @@ async function sendVoiceMessage(audioBase64: string, mimeType: string) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        chapter: activeChapter.value,
         audioBase64,
         audioMimeType: mimeType,
         usedFullScaffold: usedFullScaffold.value,
@@ -1033,11 +1122,11 @@ async function sendVoiceMessage(audioBase64: string, mimeType: string) {
       messages.value.push(assistantMsg);
 
       // 若开启了 TTS，自动朗读
+      const voiceMsgKey = 'msg_' + (messages.value.length - 1);
       if (ttsEnabled.value && json.data.audio) {
-        const msgKey = 'msg_' + (messages.value.length - 1);
-        playSpeech(json.data.npcReply, msgKey, json.data.audio);
+        playSpeech(json.data.npcReply, voiceMsgKey, json.data.audio);
       } else if (ttsEnabled.value) {
-        speakWithBrowser(json.data.npcReply);
+        speakWithBrowser(json.data.npcReply, voiceMsgKey);
       }
 
       // 自动结案落锁 (完成 3 回合)
@@ -1262,14 +1351,51 @@ function handleApplyFullScaffold() {
   });
 }
 
-// 模拟一键跟读入库 (暗度陈仓回流模块 A)
-function handleSyncDeck() {
-  isSynced.value = true;
-  alert('🎉 恭喜！本局破局金句已成功同步沉淀至【模块 A：明日复习计划】！');
+// 将破局金句关键词与本局命中词块真实同步至模块 A UserWord 复习池
+async function handleSyncDeck() {
+  if (isSynced.value || isSyncingDeck.value) return;
+  isSyncingDeck.value = true;
+  try {
+    const res = await fetch('/api/avg-test/sync-words', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chapter: activeChapter.value,
+        takeaway: settlementData.value?.oneKeyTakeaway?.nativeSentence || ''
+      })
+    });
+    const json = await res.json();
+    if (json.success && json.data) {
+      if (json.data.requiresLogin) {
+        syncFeedback.value = {
+          requiresLogin: true,
+          message: json.data.message || '当前为独立试玩状态，登录后可永久同步至模块 A 复习计划。',
+          words: []
+        };
+        showToast('💡 当前为未登录试玩模式；登录模块 A 账号后可永久写入复习池！');
+      } else {
+        isSynced.value = true;
+        const wordNames = (json.data.syncedWords || []).map((w: any) => w.word);
+        syncFeedback.value = {
+          requiresLogin: false,
+          message: json.data.message || `已同步 ${wordNames.length} 个核心词到模块 A 复习池`,
+          words: wordNames
+        };
+        showToast(`🎉 已沉淀 ${wordNames.length} 个酒店核心词到【模块 A · 第3关听力 & 复习计划】！`);
+      }
+    } else {
+      showToast('⚠️ ' + (json.message || '同步词库失败'));
+    }
+  } catch (err) {
+    console.error('同步模块 A 词汇失败:', err);
+    showToast('⚠️ 网络错误，词汇同步失败');
+  } finally {
+    isSyncingDeck.value = false;
+  }
 }
 
 // 初始化关卡数据
-async function loadInitData(targetMode?: 'standard' | 'ng_plus', autoPlayOpening = false) {
+async function loadInitData(targetMode?: 'standard' | 'ng_plus') {
   loading.value = true;
   try {
     const modeQuery = targetMode ? `?runMode=${targetMode}` : '';
@@ -1293,13 +1419,11 @@ async function loadInitData(targetMode?: 'standard' | 'ng_plus', autoPlayOpening
       if (json.data.history && json.data.history.length > 0) {
         messages.value = json.data.history;
       }
+      ngCallStarted.value = runMode.value !== 'ng_plus' || currentRound.value > 0 || (json.data.history?.length || 0) > 0 || isCompleted.value;
       if (runMode.value === 'ng_plus' && currentRound.value === 0) {
         inputMode.value = 'speak';
       }
       await scrollToBottom();
-      if (autoPlayOpening && runMode.value === 'ng_plus' && ttsEnabled.value && json.data.openingLine) {
-        playSpeech(json.data.openingLine, 'opening');
-      }
     }
   } catch (err) {
     console.error('加载剧本失败:', err);
@@ -1331,6 +1455,7 @@ async function sendMessage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        chapter: activeChapter.value,
         message: text,
         usedFullScaffold: usedFullScaffold.value,
         ttsEnabled: ttsEnabled.value,
@@ -1365,11 +1490,11 @@ async function sendMessage() {
       messages.value.push(assistantMsg);
 
       // 自动播放 NPC 语音 (若开启 TTS 开关，配额耗尽时自动 fallback 浏览器发音)
+      const voiceMsgKey = 'msg_' + (messages.value.length - 1);
       if (ttsEnabled.value && json.data.audio) {
-        const msgKey = 'msg_' + (messages.value.length - 1);
-        playSpeech(json.data.npcReply, msgKey, json.data.audio);
+        playSpeech(json.data.npcReply, voiceMsgKey, json.data.audio);
       } else if (ttsEnabled.value) {
-        speakWithBrowser(json.data.npcReply);
+        speakWithBrowser(json.data.npcReply, voiceMsgKey);
       }
 
       // 自动结案落锁 (完成 3 回合)
@@ -1404,6 +1529,7 @@ async function resolveNegotiation() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        chapter: activeChapter.value,
         finalStatement: messages.value.length ? messages.value[messages.value.length - 1].content : ''
       })
     });
@@ -1446,9 +1572,11 @@ async function resetSession(targetMode?: 'standard' | 'ng_plus') {
     subtitleRevealedCount.value = 0;
     twistAddressed.value = nextMode !== 'ng_plus';
     activeTwist.value = null;
+    ngCallStarted.value = nextMode !== 'ng_plus';
     currentEmotion.value = 'neutral';
     isCompleted.value = false;
     isSynced.value = false;
+    syncFeedback.value = null;
     usedFullScaffold.value = false;
     peekWeapon.value = null;
     actionToast.value = '';
@@ -1458,9 +1586,9 @@ async function resetSession(targetMode?: 'standard' | 'ng_plus') {
     } else {
       inputMode.value = 'cards';
     }
-    await loadInitData(nextMode, nextMode === 'ng_plus');
+    await loadInitData(nextMode);
     if (nextMode === 'ng_plus') {
-      showToast('📞 已接入午夜内线盲听模式！请点击“朗读/音浪条”听清来电后用语音或手打正面拆招！');
+      showToast('📞 已接入午夜内线盲听模式！点击【🎧 点击接听并开始盲听】播放第 1 句！');
     }
   } catch (err) {
     console.error('重置失败:', err);
@@ -1469,14 +1597,20 @@ async function resetSession(targetMode?: 'standard' | 'ng_plus') {
   }
 }
 
-onMounted(() => {
-  loadInitData();
+onMounted(async () => {
+  const requestedMode = route.query.runMode === 'ng_plus'
+    ? 'ng_plus'
+    : (route.query.runMode === 'standard' ? 'standard' : undefined);
+  await loadInitData(requestedMode);
+  if (requestedMode === 'ng_plus' && isCompleted.value && runMode.value !== 'ng_plus') {
+    await resetSession('ng_plus');
+  }
 });
 </script>
 
 <style scoped>
 .avg-test-page {
-  min-height: 100vh;
+  min-height: calc(100vh - 64px);
   background: #090e17;
   color: #e2e8f0;
   display: flex;
@@ -1486,18 +1620,22 @@ onMounted(() => {
 
 /* 顶部状态栏 */
 .top-nav {
-  height: 60px;
+  min-height: 54px;
+  height: auto;
   background: #0f172a;
   border-bottom: 1px solid #1e293b;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 24px;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 8px 20px;
 }
 .nav-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 .badge-tag {
   background: #1e3a5f;
@@ -1509,7 +1647,7 @@ onMounted(() => {
   text-transform: uppercase;
 }
 .nav-brand h1 {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
   color: #f8fafc;
   margin: 0;
@@ -1517,7 +1655,8 @@ onMounted(() => {
 .nav-status {
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .status-pill {
   background: #1e293b;
@@ -1661,12 +1800,12 @@ onMounted(() => {
 .main-layout {
   flex: 1;
   display: grid;
-  grid-template-columns: 360px 1fr;
+  grid-template-columns: 350px 1fr;
   max-width: 1400px;
   width: 100%;
   margin: 0 auto;
-  padding: 20px;
-  gap: 20px;
+  padding: 14px 20px;
+  gap: 18px;
   box-sizing: border-box;
 }
 
@@ -1866,20 +2005,29 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  height: calc(100vh - 90px);
-  min-height: 540px;
+  height: calc(100vh - 155px);
+  min-height: 500px;
   box-sizing: border-box;
   overflow: hidden;
 }
 
 .objective-banner {
+  flex-shrink: 0;
   background: #0f172a;
   border: 1px solid #1e293b;
   border-radius: 10px;
-  padding: 10px 16px;
+  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.objective-top-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 .target-flag {
   background: #1e3a5f;
@@ -1890,16 +2038,19 @@ onMounted(() => {
   border-radius: 4px;
   white-space: nowrap;
 }
-.objective-banner p {
+.objective-banner p.objective-text {
   margin: 0;
-  font-size: 13px;
+  font-size: 12.5px;
   color: #cbd5e1;
   flex: 1;
+  min-width: 200px;
+  line-height: 1.4;
 }
 .pacing-pill {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
   background: #1e293b;
   padding: 4px 10px;
   border-radius: 6px;
@@ -1908,6 +2059,7 @@ onMounted(() => {
   font-size: 11px;
   font-weight: 700;
   color: #f59e0b;
+  white-space: nowrap;
 }
 .pacing-hint {
   font-size: 11px;
@@ -1917,7 +2069,7 @@ onMounted(() => {
 /* 对话视窗 */
 .chat-viewport {
   flex: 1;
-  min-height: 0;
+  min-height: 240px;
   background: #0f172a;
   border: 1px solid #1e293b;
   border-radius: 12px;
@@ -3076,8 +3228,8 @@ onMounted(() => {
 .ng-blind-status-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin: 8px 0;
+  gap: 6px;
+  margin: 0;
 }
 .ng-status-chip {
   font-size: 11px;
@@ -3328,5 +3480,157 @@ onMounted(() => {
 .btn-ng-challenge:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
+}
+
+/* 二周目来电接听前等待卡 & 紧凑操作条 */
+.ng-incoming-call-card {
+  margin: auto;
+  max-width: 480px;
+  width: 100%;
+  background: linear-gradient(145deg, #16140f 0%, #0f172a 100%);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  border-radius: 14px;
+  padding: 24px 22px;
+  text-align: center;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45), 0 0 24px rgba(245, 158, 11, 0.12);
+}
+.incoming-ring-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.16);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  padding: 4px 12px;
+  border-radius: 999px;
+  margin-bottom: 10px;
+}
+.ng-incoming-call-card h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  color: #fef3c7;
+}
+.ng-incoming-call-card p {
+  margin: 0 0 18px 0;
+  font-size: 13px;
+  color: #cbd5e1;
+  line-height: 1.55;
+}
+.btn-start-blind-call {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #090e17;
+  border: none;
+  border-radius: 10px;
+  padding: 11px 22px;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(245, 158, 11, 0.35);
+  transition: transform 0.15s, box-shadow 0.2s;
+}
+.btn-start-blind-call:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgba(245, 158, 11, 0.5);
+}
+
+.ng-awaiting-call-dock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 2px;
+  font-size: 12.5px;
+  color: #fde68a;
+}
+.btn-start-blind-mini {
+  background: #f59e0b;
+  color: #090e17;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+@media (max-width: 1024px) {
+  .main-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-height: 820px) {
+  .stage-section {
+    height: auto;
+    min-height: 460px;
+    overflow: visible;
+  }
+  .chat-viewport {
+    min-height: 280px;
+    max-height: 58vh;
+  }
+}
+
+.btn-back-module {
+  background: rgba(30, 41, 59, 0.85);
+  color: #cbd5e1;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 5px 11px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.btn-back-module:hover {
+  background: #1e293b;
+  color: #f8fafc;
+  border-color: #60a5fa;
+}
+
+.priv-persisted-tag {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: rgba(16, 185, 129, 0.18);
+  border: 1px solid rgba(52, 211, 153, 0.45);
+  color: #6ee7b7;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.sync-feedback-box {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #a7f3d0;
+  font-size: 12.5px;
+}
+.sync-feedback-box.guest {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #fde68a;
+}
+.sync-feedback-box p {
+  margin: 0;
+}
+.synced-word-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.synced-chip {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  color: #6ee7b7;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
 }
 </style>

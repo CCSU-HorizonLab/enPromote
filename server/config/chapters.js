@@ -1,17 +1,18 @@
+const { HOTEL_SCENE_WORDS } = require('./sceneVocabularies');
+
 // 章节配置
 const CHAPTERS = {
   A: {
     id: 'A',
     name: '酒店场景',
-    description: '学习酒店入住、退房等相关英语',
+    description: '学习酒店入住、身份核实、礼貌升房与退房结账核心英语',
     scenario: 'hotel',
+    avgScenarioId: 'scenario_hotel_01',
     color: '#4A90E2',
     backgroundColor: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    aiPrompt: '你是一个专业的酒店前台工作人员，请用英语与客人进行对话。场景包括：入住登记、房间服务、退房结账等。请保持礼貌和专业。',
-    vocabulary: [
-      'reception', 'check-in', 'check-out', 'reservation', 'lobby',
-      'suite', 'single room', 'double room', 'key card', 'concierge'
-    ]
+    aiPrompt: '你是一个专业的酒店前台工作人员，请用英语与客人进行对话。场景包括：入住登记、核实预订、房间升级、退房结账等。请保持礼貌和专业。',
+    vocabulary: HOTEL_SCENE_WORDS.map(item => item.word),
+    wordBank: HOTEL_SCENE_WORDS
   },
   B: {
     id: 'B', 
