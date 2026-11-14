@@ -31,13 +31,18 @@ function inspectMessageObjectiveFeatures({ userMessage = '', currentRound = 0, i
     triggers.hasNameStated = true;
   }
 
-  // 2. 事实证据 2：出示凭证/护照/订单号
+  // 2. 事实证据 2：出示凭证/护照/订单号（兼容语音转写常见变体如 L-88219 / booking）
   if (
     lower.includes('confirmation') ||
     lower.includes('number') ||
     lower.includes('passport') ||
     lower.includes('id') ||
-    lower.includes('code')
+    lower.includes('code') ||
+    lower.includes('booking') ||
+    lower.includes('88219') ||
+    lower.includes('l-88219') ||
+    lower.includes('lon-') ||
+    lower.includes('reference')
   ) {
     triggers.hasProofProvided = true;
   }
@@ -76,6 +81,10 @@ function evaluateRapportSettlement({
   avgToneScore = 20,
   penaltyPoints = 0,
   usedFullScaffold = false,
+  usedCardsMode = false,
+  runMode = 'standard',
+  subtitleRevealedCount = 0,
+  twistAddressed = true,
   scenario
 }) {
   // 1. 事实证据得分 (0 ~ 40)
@@ -135,12 +144,74 @@ function evaluateRapportSettlement({
     stars = 1;
   }
 
-  const endingMeta = scenario.endings[outcome] || scenario.endings.success;
+  const isNgPlus = runMode === 'ng_plus';
+  const roteMemorizationPenalty = (isNgPlus && !twistAddressed) ? 20 : 0;
+  const effectiveDeductions = deductions + roteMemorizationPenalty;
+  const effectiveFinalScore = Math.max(0, Math.min(100, finalScore - roteMemorizationPenalty));
+
+  let effectiveStars = stars;
+  let effectiveOutcome = outcome;
+  if (roteMemorizationPenalty > 0) {
+    if (effectiveFinalScore >= 85 && !scaffoldCapTriggered) {
+      effectiveStars = 3;
+      effectiveOutcome = 'critical_success';
+    } else if (effectiveFinalScore >= 60) {
+      effectiveStars = 2;
+      effectiveOutcome = 'success';
+    } else {
+      effectiveStars = 1;
+      effectiveOutcome = 'fail_forward';
+    }
+  }
+
+  // 计算正交“含金量材质印记”与特权解锁（不新增 4~5 星，坚持 1~3 星基底）
+  let prestigeTier = 'standard';
+  let prestigeLabel = usedCardsMode ? '🥉 战术卡牌通关' : '🥉 基础交涉印记';
+  let prestigeReason = usedCardsMode
+    ? '借助战术卡牌组完成交涉（切至“开口/手打模式”可冲击脱稿或黑金认证）'
+    : '完成主线交涉；得分达到 85+ 并满足脱稿/盲听条件可解锁高阶印记';
+  let privilegeUnlocked = null;
+
+  if (usedFullScaffold || (isNgPlus && subtitleRevealedCount > 0)) {
+    prestigeTier = 'assisted';
+    if (usedFullScaffold) {
+      prestigeLabel = '📑 小抄辅助印记';
+      prestigeReason = '使用了全句提示小抄，星级上限及含金量受限';
+    } else {
+      prestigeLabel = '👁️ 破盲显露印记';
+      prestigeReason = `二周目盲听途中显露了 ${subtitleRevealedCount} 次英文台词，失去黑金纯度`;
+    }
+  } else if (isNgPlus && effectiveStars === 3 && !usedCardsMode && twistAddressed && subtitleRevealedCount === 0) {
+    prestigeTier = 'black_gold';
+    prestigeLabel = '🎧 黑金·盲听实战大师';
+    prestigeReason = '二周目 0 次显露台词纯盲听 + 临场拆解突发变故 + 纯语音/脱稿拿下顶层套房！';
+    privilegeUnlocked = {
+      unlocked: true,
+      badge: '🗝️ 模块 A 免修特权卡',
+      description: '已解锁【酒店值机场景】模块 A 词库 10 词免修与 Boss 关卡直通资格！'
+    };
+  } else if (effectiveStars === 3 && !usedCardsMode) {
+    prestigeTier = 'authentic';
+    prestigeLabel = '🥈 脱稿交涉印记';
+    prestigeReason = isNgPlus
+      ? '二周目脱稿拿下 3 星（需保持 0 显露台词且完整回应突发变故方可晋升黑金）'
+      : '一周目无小抄脱稿/语音拿下最高 3 星结局，已具备挑战二周目盲听的实力！';
+  }
+
+  const endingMeta = scenario.endings[effectiveOutcome] || scenario.endings.success;
 
   return {
-    finalScore,
-    stars,
-    outcome,
+    finalScore: effectiveFinalScore,
+    stars: effectiveStars,
+    outcome: effectiveOutcome,
+    runMode,
+    prestigeTier,
+    prestigeLabel,
+    prestigeReason,
+    privilegeUnlocked,
+    twistAddressed,
+    subtitleRevealedCount,
+    usedCardsMode,
     scaffoldCapTriggered,
     usedFullScaffold,
     scoreBreakdown: {
@@ -149,7 +220,8 @@ function evaluateRapportSettlement({
       domainChunksScore,      // 0 ~ 15 (场景业务事实零件 What)
       targetChunksScore,      // 0 ~ 30 (高级场景词块总计)
       toneScore,              // 0 ~ 30 (英伦礼貌与风度)
-      deductions,             // 扣减分
+      deductions: effectiveDeductions,             // 扣减分（含死记硬背罚分）
+      roteMemorizationPenalty,
       scaffoldCapTriggered    // 是否因抄小抄被压制
     },
     title: scaffoldCapTriggered ? '【达成及格 · 照本宣科】标准大床房入住 (2星小抄上限)' : endingMeta.title,

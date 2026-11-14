@@ -1,12 +1,34 @@
 <template>
-  <div class="avg-test-page">
+  <div class="avg-test-page" :class="{ 'ng-plus-theme': runMode === 'ng_plus' }">
     <!-- 顶部状态栏 -->
     <header class="top-nav">
       <div class="nav-brand">
-        <span class="badge-tag">AVG 语用沙盘 · 3 回合短平快博弈</span>
+        <span class="badge-tag" :class="{ 'ng-badge-tag': runMode === 'ng_plus' }">
+          {{ runMode === 'ng_plus' ? '📞 NG+ 二周目盲听挑战 · 3 回合' : 'AVG 语用沙盘 · 3 回合短平快博弈' }}
+        </span>
         <h1>{{ scenarioData?.title || '正在加载剧本...' }}</h1>
       </div>
       <div class="nav-status" v-if="scenarioData">
+        <div class="run-mode-switcher">
+          <button
+            class="run-mode-btn"
+            :class="{ active: runMode === 'standard' }"
+            @click="switchRunMode('standard')"
+            :disabled="loading"
+            title="一周目：酒店大堂面谈（有英文台词 + 卡牌/装配支持）"
+          >
+            👔 一周目·面谈
+          </button>
+          <button
+            class="run-mode-btn ng-btn"
+            :class="{ active: runMode === 'ng_plus' }"
+            @click="switchRunMode('ng_plus')"
+            :disabled="loading"
+            title="二周目：午夜电话纯盲听 + 随机突发变故（0 显露台词解锁黑金 3 星与模块 A 免修特权）"
+          >
+            📞 二周目·盲听
+          </button>
+        </div>
         <div class="status-pill score-pill" :class="getScoreClass(liveScore)">
           <span class="label">好感折服度</span>
           <span class="val">{{ liveScore }} / 100</span>
@@ -127,9 +149,22 @@
       <!-- 右栏：对话推进舞台与行动区 -->
       <section class="stage-section">
         <!-- 关卡通关目标条与阶段节奏提示 (防一回杀节奏锁) -->
-        <div class="objective-banner">
-          <div class="target-flag">🎯 任务目标</div>
-          <p>{{ scenarioData.objectiveDescription }}</p>
+        <div class="objective-banner" :class="{ 'ng-objective-banner': runMode === 'ng_plus' }">
+          <div class="target-flag">
+            {{ runMode === 'ng_plus' ? '📞 二周目任务 · 午夜来电盲听拆招' : '🎯 任务目标' }}
+          </div>
+          <p v-if="runMode === 'ng_plus'">
+            你正在通过越洋/内线电话与 Arthur 紧急核对订单。对方台词默认开启<strong>音浪盲听遮罩</strong>，且随机触发了<strong>隐藏突发变故</strong>——请专注听清后临场回应（0 次显露台词拿 3 星即可解锁黑金印记！）。
+          </p>
+          <p v-else>{{ scenarioData.objectiveDescription }}</p>
+          <div class="ng-blind-status-row" v-if="runMode === 'ng_plus' && !isCompleted">
+            <span class="ng-status-chip" :class="subtitleRevealedCount === 0 ? 'chip-gold' : 'chip-warn'">
+              {{ subtitleRevealedCount === 0 ? '🎧 纯盲听保持中 (0 显露 · 黑金资格有效)' : `👁️ 已显露台词 ${subtitleRevealedCount} 次 (黑金资格已失去)` }}
+            </span>
+            <span class="ng-status-chip" :class="twistAddressed ? 'chip-ok' : 'chip-pending'">
+              {{ twistAddressed ? '✅ 已侦测到你正面回应来电变故' : '⚠️ 待听清并正面拆解来电突发问题' }}
+            </span>
+          </div>
           <div class="pacing-pill" :class="pacingInfo.phase" v-if="!isCompleted">
             <span class="pacing-badge">{{ pacingInfo.label }}</span>
             <span class="pacing-hint">{{ pacingInfo.hint }}</span>
@@ -140,9 +175,9 @@
         <div class="chat-viewport" ref="chatViewportRef">
           <!-- 开场白 -->
           <div class="chat-row npc-row">
-            <div class="bubble npc-bubble" :class="{ 'speaking-bubble': isPlayingVoice('opening') }">
+            <div class="bubble npc-bubble" :class="{ 'speaking-bubble': isPlayingVoice('opening'), 'masked-bubble': isBubbleMasked('opening') }">
               <div class="bubble-header-row">
-                <span class="speaker">{{ scenarioData.npc.name }}</span>
+                <span class="speaker">{{ scenarioData.npc.name }} <small v-if="runMode === 'ng_plus'" class="call-tag">📞 午夜内线</small></span>
                 <button
                   class="btn-audio-speak"
                   :class="{ 'is-playing': isPlayingVoice('opening'), 'is-loading': isLoadingVoice('opening') }"
@@ -154,7 +189,24 @@
                   <span v-else>🔊 朗读</span>
                 </button>
               </div>
-              <p class="speech-text">{{ scenarioData.openingLine }}</p>
+              <div v-if="isBubbleMasked('opening')" class="blind-audio-mask">
+                <div class="blind-wave-row" @click="playSpeech(scenarioData.openingLine, 'opening')">
+                  <span class="blind-phone-icon">{{ isPlayingVoice('opening') ? '🔊' : '🎧' }}</span>
+                  <div class="blind-bars" :class="{ animating: isPlayingVoice('opening') }">
+                    <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                  </div>
+                  <span class="blind-prompt-text">
+                    {{ isPlayingVoice('opening') ? '来电播放中，请听清对方提出的突发状况...' : '点击收听午夜来电语音（文本已盲听遮罩）' }}
+                  </span>
+                </div>
+                <div class="blind-actions-row">
+                  <span class="blind-blurred-preview">██████ █████ ███ ██████ ████████...</span>
+                  <button class="btn-reveal-subtitle" @click.stop="revealSubtitle('opening')">
+                    👁️ 显露台词 (将失去黑金印记)
+                  </button>
+                </div>
+              </div>
+              <p v-else class="speech-text">{{ scenarioData.openingLine }}</p>
             </div>
           </div>
 
@@ -169,11 +221,12 @@
               class="bubble" 
               :class="[
                 msg.role === 'user' ? 'user-bubble' : 'npc-bubble',
-                isPlayingVoice('msg_' + index) ? 'speaking-bubble' : ''
+                isPlayingVoice('msg_' + index) ? 'speaking-bubble' : '',
+                msg.role === 'assistant' && isBubbleMasked('msg_' + index) ? 'masked-bubble' : ''
               ]"
             >
               <div class="bubble-header-row" v-if="msg.role === 'assistant'">
-                <span class="speaker">{{ scenarioData.npc.name }}</span>
+                <span class="speaker">{{ scenarioData.npc.name }} <small v-if="runMode === 'ng_plus'" class="call-tag">📞 午夜内线</small></span>
                 <button
                   class="btn-audio-speak"
                   :class="{ 'is-playing': isPlayingVoice('msg_' + index), 'is-loading': isLoadingVoice('msg_' + index) }"
@@ -189,7 +242,24 @@
                 <span class="speaker">You</span>
                 <span v-if="msg.isVoiceInput" class="voice-input-tag">🎙️ 语音脱稿实录</span>
               </div>
-              <p class="speech-text">{{ msg.content }}</p>
+              <div v-if="msg.role === 'assistant' && isBubbleMasked('msg_' + index)" class="blind-audio-mask">
+                <div class="blind-wave-row" @click="playSpeech(msg.content, 'msg_' + index, msg.audio)">
+                  <span class="blind-phone-icon">{{ isPlayingVoice('msg_' + index) ? '🔊' : '🎧' }}</span>
+                  <div class="blind-bars" :class="{ animating: isPlayingVoice('msg_' + index) }">
+                    <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                  </div>
+                  <span class="blind-prompt-text">
+                    {{ isPlayingVoice('msg_' + index) ? 'Arthur 正在电话回应中...' : '点击重听该回合来电语音' }}
+                  </span>
+                </div>
+                <div class="blind-actions-row">
+                  <span class="blind-blurred-preview">█████ ███████ ████ ███████...</span>
+                  <button class="btn-reveal-subtitle" @click.stop="revealSubtitle('msg_' + index)">
+                    👁️ 显露台词 (将失去黑金印记)
+                  </button>
+                </div>
+              </div>
+              <p v-else class="speech-text">{{ msg.content }}</p>
 
               <!-- 极简游戏动态浮标标签 (拒绝大段垃圾语法弹窗) -->
               <div v-if="msg.evaluation" class="eval-card">
@@ -214,27 +284,49 @@
           </div>
 
           <!-- 结案真实消费小票卡片 (Receipt Card) -->
-          <div v-if="isCompleted && settlementData" class="receipt-stage-card" :class="settlementData.outcome">
+          <div
+            v-if="isCompleted && settlementData"
+            class="receipt-stage-card"
+            :class="[settlementData.outcome, 'prestige-' + (settlementData.prestigeTier || 'standard')]"
+          >
             <div class="receipt-header">
               <div class="receipt-brand">
-                <span class="hotel-emblem">🏰</span>
+                <span class="hotel-emblem">{{ settlementData.prestigeTier === 'black_gold' ? '👑' : '🏰' }}</span>
                 <h4>THE ROYAL GARDEN HOTEL</h4>
-                <small>LONDON · NIGHT AUDIT NEGOTIATION RECEIPT</small>
+                <small>{{ settlementData.runMode === 'ng_plus' ? 'NG+ MIDNIGHT BLIND-LISTENING RECEIPT' : 'LONDON · NIGHT AUDIT NEGOTIATION RECEIPT' }}</small>
               </div>
-              <div class="receipt-stars">
+              <div class="receipt-stars" :class="{ 'stars-black-gold': settlementData.prestigeTier === 'black_gold' }">
                 <span v-for="s in 3" :key="s" class="star" :class="{ active: s <= settlementData.stars }">
                   ★
                 </span>
-                <span class="stars-label">{{ settlementData.stars }} 星评级</span>
+                <span class="stars-label">
+                  {{ settlementData.stars }} 星{{ settlementData.prestigeTier === 'black_gold' ? ' · 黑金认证' : '评级' }}
+                </span>
               </div>
             </div>
 
             <div class="receipt-divider"></div>
 
-            <!-- 小抄封顶或脱稿认证印章 -->
-            <div class="receipt-stamp" :class="settlementData.scaffoldCapTriggered ? 'stamp-cap' : 'stamp-pro'" v-if="settlementData.scaffoldCapTriggered || settlementData.stars === 3">
-              <span v-if="settlementData.scaffoldCapTriggered">📑 ASSISTED DRAFT · 2-STAR CAPPED (已触发小抄封顶)</span>
-              <span v-else>🏆 AUTHENTIC NEGOTIATION · 纯脱稿组装认证</span>
+            <!-- 正交第二维度：含金量材质印章 (黑金 / 银质脱稿 / 铜牌标准 / 辅助受限) -->
+            <div class="receipt-stamp" :class="'stamp-' + (settlementData.prestigeTier || 'standard')">
+              <div class="stamp-title">{{ settlementData.prestigeLabel || '🥉 标准交涉通关' }}</div>
+              <div class="stamp-reason" v-if="settlementData.prestigeReason">{{ settlementData.prestigeReason }}</div>
+            </div>
+
+            <!-- 黑金通关专属：模块 A 词库免修 + Boss 直通特权卡 -->
+            <div class="receipt-privilege-card" v-if="settlementData.privilegeUnlocked?.unlocked">
+              <div class="priv-badge">{{ settlementData.privilegeUnlocked.badge }}</div>
+              <div class="priv-body">
+                <strong>🎁 实战免修特权已激活 (Module A Linkage)</strong>
+                <p>{{ settlementData.privilegeUnlocked.description }}</p>
+              </div>
+            </div>
+
+            <!-- 二周目复盘：揭晓本局突发隐藏变故（上方所有来电台词现已自动解锁供复盘） -->
+            <div class="ng-twist-recap" v-if="runMode === 'ng_plus' && activeTwist">
+              <span class="recap-tag">🔓 全场盲听台词已解锁复盘</span>
+              <div><strong>本局突发变故：</strong>{{ activeTwist.title }}</div>
+              <p>{{ activeTwist.phoneContextHint }}</p>
             </div>
 
             <div class="receipt-outcome">
@@ -279,9 +371,13 @@
                   <span>英伦绅士礼仪 (LLM 得体度判定)：</span>
                   <strong>+{{ settlementData.scoreBreakdown.toneScore }} 分</strong>
                 </div>
-                <div class="b-row penalty-row" v-if="settlementData.scoreBreakdown.deductions > 0">
-                  <span>违规/冒犯扣减：</span>
-                  <strong>-{{ settlementData.scoreBreakdown.deductions }} 分</strong>
+                <div class="b-row penalty-row" v-if="settlementData.scoreBreakdown.roteMemorizationPenalty > 0">
+                  <span>📵 未回应二周目变故 (防死背扣减)：</span>
+                  <strong class="color-danger">-{{ settlementData.scoreBreakdown.roteMemorizationPenalty }} 分</strong>
+                </div>
+                <div class="b-row penalty-row" v-if="(settlementData.scoreBreakdown.deductions - (settlementData.scoreBreakdown.roteMemorizationPenalty || 0)) > 0">
+                  <span>违规/操之过急扣减：</span>
+                  <strong>-{{ settlementData.scoreBreakdown.deductions - (settlementData.scoreBreakdown.roteMemorizationPenalty || 0) }} 分</strong>
                 </div>
                 <div class="b-row cap-row" v-if="settlementData.scaffoldCapTriggered">
                   <span>小抄使用封顶规则：</span>
@@ -324,7 +420,21 @@
             </div>
 
             <div class="receipt-actions">
-              <button class="btn-primary" @click="resetSession">🔄 再次演练本场景</button>
+              <button class="btn-primary" @click="resetSession()">🔄 再练一次当前模式</button>
+              <button
+                v-if="runMode === 'standard'"
+                class="btn-ng-challenge"
+                @click="switchRunMode('ng_plus')"
+              >
+                📞 挑战二周目：午夜内线盲听 (赢黑金特权)
+              </button>
+              <button
+                v-else
+                class="btn-ghost"
+                @click="switchRunMode('standard')"
+              >
+                👔 返回一周目·面谈模式
+              </button>
             </div>
           </div>
         </div>
@@ -590,11 +700,38 @@ function showToast(msg: string) {
   }, 3800);
 }
 
-// 确定性天平状态
+// 确定性天平与二周目盲听挑战状态
+const runMode = ref<'standard' | 'ng_plus'>('standard');
+const activeTwist = ref<any>(null);
+const revealedBubbles = ref<string[]>([]);
+const subtitleRevealedCount = ref(0);
+const twistAddressed = ref(true);
 const liveScore = ref(15);
 const factsVerified = ref<string[]>([]);
 const weaponsHit = ref<string[]>([]);
 const settlementData = ref<any>(null);
+
+function isBubbleMasked(bubbleKey: string) {
+  if (runMode.value !== 'ng_plus') return false;
+  if (isCompleted.value) return false;
+  return !revealedBubbles.value.includes(bubbleKey);
+}
+
+async function revealSubtitle(bubbleKey: string) {
+  if (revealedBubbles.value.includes(bubbleKey)) return;
+  revealedBubbles.value = [...revealedBubbles.value, bubbleKey];
+  subtitleRevealedCount.value += 1;
+  showToast('👁️ 已显露英文台词（黑金纯度印记已失去，但仍可继续冲击 3 星！）');
+  try {
+    await fetch('/api/avg-test/reveal-subtitle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: 'default', bubbleKey })
+    });
+  } catch (err) {
+    console.warn('记录显露台词失败:', err);
+  }
+}
 
 const pacingInfo = ref({
   phase: 'phase1',
@@ -882,6 +1019,8 @@ async function sendVoiceMessage(audioBase64: string, mimeType: string) {
       currentEmotion.value = json.data.emotion;
       pacingInfo.value = json.data.pacing;
       usedFullScaffold.value = !!json.data.usedFullScaffold;
+      twistAddressed.value = json.data.twistAddressed !== false;
+      subtitleRevealedCount.value = json.data.subtitleRevealedCount ?? subtitleRevealedCount.value;
       factsVerified.value = json.data.factsVerified || [];
       weaponsHit.value = json.data.weaponsHit || [];
 
@@ -1130,13 +1269,19 @@ function handleSyncDeck() {
 }
 
 // 初始化关卡数据
-async function loadInitData() {
+async function loadInitData(targetMode?: 'standard' | 'ng_plus', autoPlayOpening = false) {
   loading.value = true;
   try {
-    const res = await fetch('/api/avg-test/init');
+    const modeQuery = targetMode ? `?runMode=${targetMode}` : '';
+    const res = await fetch(`/api/avg-test/init${modeQuery}`);
     const json = await res.json();
     if (json.success && json.data) {
       scenarioData.value = json.data;
+      runMode.value = json.data.runMode === 'ng_plus' ? 'ng_plus' : 'standard';
+      activeTwist.value = json.data.activeTwist || null;
+      twistAddressed.value = json.data.twistAddressed !== false;
+      subtitleRevealedCount.value = json.data.subtitleRevealedCount || 0;
+      revealedBubbles.value = json.data.revealedIndices || [];
       currentRound.value = json.data.currentRound || 0;
       liveScore.value = json.data.liveScore || 15;
       pacingInfo.value = json.data.pacing;
@@ -1148,13 +1293,24 @@ async function loadInitData() {
       if (json.data.history && json.data.history.length > 0) {
         messages.value = json.data.history;
       }
+      if (runMode.value === 'ng_plus' && currentRound.value === 0) {
+        inputMode.value = 'speak';
+      }
       await scrollToBottom();
+      if (autoPlayOpening && runMode.value === 'ng_plus' && ttsEnabled.value && json.data.openingLine) {
+        playSpeech(json.data.openingLine, 'opening');
+      }
     }
   } catch (err) {
     console.error('加载剧本失败:', err);
   } finally {
     loading.value = false;
   }
+}
+
+async function switchRunMode(targetMode: 'standard' | 'ng_plus') {
+  if (loading.value) return;
+  await resetSession(targetMode);
 }
 
 // 发送用户对白
@@ -1177,7 +1333,8 @@ async function sendMessage() {
       body: JSON.stringify({
         message: text,
         usedFullScaffold: usedFullScaffold.value,
-        ttsEnabled: ttsEnabled.value
+        ttsEnabled: ttsEnabled.value,
+        inputMode: inputMode.value
       })
     });
     const json = await res.json();
@@ -1188,6 +1345,8 @@ async function sendMessage() {
       currentEmotion.value = json.data.emotion;
       pacingInfo.value = json.data.pacing;
       usedFullScaffold.value = !!json.data.usedFullScaffold;
+      twistAddressed.value = json.data.twistAddressed !== false;
+      subtitleRevealedCount.value = json.data.subtitleRevealedCount ?? subtitleRevealedCount.value;
       factsVerified.value = json.data.factsVerified || [];
       weaponsHit.value = json.data.weaponsHit || [];
 
@@ -1205,10 +1364,12 @@ async function sendMessage() {
       };
       messages.value.push(assistantMsg);
 
-      // 自动播放 NPC 语音 (若开启 TTS 开关)
+      // 自动播放 NPC 语音 (若开启 TTS 开关，配额耗尽时自动 fallback 浏览器发音)
       if (ttsEnabled.value && json.data.audio) {
         const msgKey = 'msg_' + (messages.value.length - 1);
         playSpeech(json.data.npcReply, msgKey, json.data.audio);
+      } else if (ttsEnabled.value) {
+        speakWithBrowser(json.data.npcReply);
       }
 
       // 自动结案落锁 (完成 3 回合)
@@ -1266,20 +1427,25 @@ async function resolveNegotiation() {
 }
 
 // 重置会话
-async function resetSession() {
+async function resetSession(targetMode?: 'standard' | 'ng_plus') {
   stopCurrentAudio();
   loading.value = true;
+  const nextMode = (typeof targetMode === 'string' ? targetMode : runMode.value) || 'standard';
   try {
     await fetch('/api/avg-test/reset', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId: 'default' })
+      body: JSON.stringify({ sessionId: 'default', runMode: nextMode })
     });
     userInput.value = '';
     selectedStance.value = null;
     selectedChunk.value = null;
     isSmartSnapped.value = false;
     messages.value = [];
+    revealedBubbles.value = [];
+    subtitleRevealedCount.value = 0;
+    twistAddressed.value = nextMode !== 'ng_plus';
+    activeTwist.value = null;
     currentEmotion.value = 'neutral';
     isCompleted.value = false;
     isSynced.value = false;
@@ -1287,7 +1453,15 @@ async function resetSession() {
     peekWeapon.value = null;
     actionToast.value = '';
     settlementData.value = null;
-    await loadInitData();
+    if (nextMode === 'ng_plus') {
+      inputMode.value = 'speak';
+    } else {
+      inputMode.value = 'cards';
+    }
+    await loadInitData(nextMode, nextMode === 'ng_plus');
+    if (nextMode === 'ng_plus') {
+      showToast('📞 已接入午夜内线盲听模式！请点击“朗读/音浪条”听清来电后用语音或手打正面拆招！');
+    }
   } catch (err) {
     console.error('重置失败:', err);
   } finally {
@@ -2852,5 +3026,307 @@ onMounted(() => {
   margin-top: 20px;
   display: flex;
   justify-content: flex-end;
+}
+
+/* ========================================================
+   二周目（NG+）盲听挑战 & 正交材质评价体系（黑金认证 / 特权卡）
+   ======================================================== */
+.avg-test-page.ng-plus-theme {
+  background: radial-gradient(circle at top right, #1b160c 0%, #090e17 55%);
+}
+.ng-badge-tag {
+  background: rgba(245, 158, 11, 0.2) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(251, 191, 36, 0.45);
+}
+
+.run-mode-switcher {
+  display: inline-flex;
+  background: #090e17;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+.run-mode-btn {
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.run-mode-btn.active {
+  background: #1e3a5f;
+  color: #f8fafc;
+}
+.run-mode-btn.ng-btn.active {
+  background: linear-gradient(135deg, #92400e 0%, #d97706 100%);
+  color: #fef3c7;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
+}
+
+.ng-objective-banner {
+  border-color: rgba(245, 158, 11, 0.4) !important;
+  background: rgba(120, 53, 15, 0.14) !important;
+}
+.ng-blind-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+.ng-status-chip {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.chip-gold {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.45);
+}
+.chip-warn {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+.chip-ok {
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+.chip-pending {
+  background: rgba(56, 189, 248, 0.14);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+}
+
+.call-tag {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  margin-left: 4px;
+}
+
+.masked-bubble {
+  border: 1px solid rgba(245, 158, 11, 0.45) !important;
+  background: linear-gradient(135deg, #161822 0%, #1c1917 100%) !important;
+}
+.blind-audio-mask {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+.blind-wave-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px dashed rgba(245, 158, 11, 0.45);
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.blind-wave-row:hover {
+  background: rgba(245, 158, 11, 0.18);
+}
+.blind-phone-icon {
+  font-size: 18px;
+}
+.blind-bars {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+}
+.blind-bars span {
+  display: inline-block;
+  width: 3px;
+  height: 6px;
+  border-radius: 2px;
+  background: #fbbf24;
+  opacity: 0.65;
+}
+.blind-bars span:nth-child(2n) { height: 12px; }
+.blind-bars span:nth-child(3n) { height: 16px; }
+.blind-bars.animating span {
+  animation: blindWavePulse 0.8s infinite ease-in-out;
+  opacity: 1;
+}
+.blind-bars.animating span:nth-child(2) { animation-delay: 0.1s; }
+.blind-bars.animating span:nth-child(3) { animation-delay: 0.2s; }
+.blind-bars.animating span:nth-child(4) { animation-delay: 0.3s; }
+.blind-bars.animating span:nth-child(5) { animation-delay: 0.15s; }
+.blind-bars.animating span:nth-child(6) { animation-delay: 0.25s; }
+@keyframes blindWavePulse {
+  0%, 100% { transform: scaleY(0.5); }
+  50% { transform: scaleY(1.3); }
+}
+.blind-prompt-text {
+  font-size: 12px;
+  color: #fde68a;
+  font-weight: 600;
+}
+.blind-actions-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.blind-blurred-preview {
+  font-family: monospace;
+  font-size: 12px;
+  color: #475569;
+  letter-spacing: 1px;
+  filter: blur(2.5px);
+  user-select: none;
+}
+.btn-reveal-subtitle {
+  background: rgba(15, 23, 42, 0.85);
+  color: #cbd5e1;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-reveal-subtitle:hover {
+  border-color: #f59e0b;
+  color: #fbbf24;
+}
+
+/* 黑金 & 正交材质结案小票视觉 */
+.receipt-stage-card.prestige-black_gold {
+  background: linear-gradient(145deg, #0b0b0f 0%, #1a150b 55%, #090e17 100%);
+  border: 2px solid #f59e0b;
+  box-shadow: 0 0 36px rgba(245, 158, 11, 0.28), inset 0 0 24px rgba(251, 191, 36, 0.08);
+}
+.stars-black-gold .star.active {
+  color: #fde047;
+  text-shadow: 0 0 12px rgba(250, 204, 21, 0.85), 0 0 4px #b45309;
+}
+.stars-black-gold .stars-label {
+  color: #fde68a;
+}
+
+.receipt-stamp {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-transform: none;
+  padding: 10px 14px;
+  border-radius: 8px;
+}
+.stamp-title {
+  font-size: 13px;
+  font-weight: 800;
+}
+.stamp-reason {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+.stamp-black_gold {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.22), rgba(180, 83, 9, 0.14));
+  color: #fde68a;
+  border: 1px solid rgba(251, 191, 36, 0.65);
+}
+.stamp-authentic {
+  background: rgba(16, 185, 129, 0.15);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.45);
+}
+.stamp-standard {
+  background: rgba(56, 189, 248, 0.12);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+}
+.stamp-assisted {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.receipt-privilege-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.16), rgba(234, 179, 8, 0.08));
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.priv-badge {
+  background: #f59e0b;
+  color: #090e17;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 5px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.priv-body strong {
+  display: block;
+  font-size: 12px;
+  color: #fde68a;
+  margin-bottom: 2px;
+}
+.priv-body p {
+  margin: 0;
+  font-size: 12px;
+  color: #fef3c7;
+  line-height: 1.4;
+}
+
+.ng-twist-recap {
+  background: rgba(30, 41, 59, 0.75);
+  border-left: 3px solid #f59e0b;
+  border-radius: 0 6px 6px 0;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+.ng-twist-recap .recap-tag {
+  display: inline-block;
+  font-size: 10px;
+  color: #fbbf24;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.ng-twist-recap p {
+  margin: 4px 0 0 0;
+  color: #94a3b8;
+  line-height: 1.45;
+}
+.color-danger {
+  color: #f87171;
+}
+
+.btn-ng-challenge {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  color: #fffbeb;
+  border: 1px solid rgba(251, 191, 36, 0.6);
+  padding: 9px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.2s;
+}
+.btn-ng-challenge:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
 }
 </style>

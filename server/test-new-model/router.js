@@ -9,11 +9,26 @@ const { generateSpeech, TTS_MODEL } = require('./services/ttsService');
 // 内存会话缓存 (用于测试调试)
 const sessions = new Map();
 
-function getOrCreateSession(sessionId = 'default') {
+function selectRandomTwist(scenario) {
+  const pool = scenario?.ngPlusTwists;
+  if (!Array.isArray(pool) || pool.length === 0) return null;
+  const idx = Math.floor(Math.random() * pool.length);
+  return pool[idx];
+}
+
+function getOrCreateSession(sessionId = 'default', requestedRunMode = null) {
+  const scenario = scenarioGraph['scenario_hotel_01'];
   if (!sessions.has(sessionId)) {
+    const runMode = requestedRunMode === 'ng_plus' ? 'ng_plus' : 'standard';
     sessions.set(sessionId, {
       scenarioId: 'scenario_hotel_01',
       npcId: 'arthur',
+      runMode,
+      activeTwist: runMode === 'ng_plus' ? selectRandomTwist(scenario) : null,
+      twistAddressed: runMode !== 'ng_plus',
+      subtitleRevealedCount: 0,
+      revealedIndices: [],
+      usedCardsMode: false,
       round: 0,
       status: 'active', // 'active' | 'completed'
       history: [],
@@ -25,6 +40,18 @@ function getOrCreateSession(sessionId = 'default') {
       usedFullScaffold: false,      // 是否启用了保底小抄整句 (若启用则封顶2星及格)
       settlement: null              // 结案小票数据
     });
+  } else if (
+    requestedRunMode &&
+    (requestedRunMode === 'standard' || requestedRunMode === 'ng_plus')
+  ) {
+    const existing = sessions.get(sessionId);
+    if (existing.round === 0 && existing.history.length === 0 && existing.runMode !== requestedRunMode) {
+      existing.runMode = requestedRunMode;
+      existing.activeTwist = requestedRunMode === 'ng_plus' ? selectRandomTwist(scenario) : null;
+      existing.twistAddressed = requestedRunMode !== 'ng_plus';
+      existing.subtitleRevealedCount = 0;
+      existing.revealedIndices = [];
+    }
   }
   return sessions.get(sessionId);
 }
@@ -68,7 +95,8 @@ function computeLiveRapportScore(session) {
 router.get('/init', (req, res) => {
   try {
     const sessionId = req.query.sessionId || 'default';
-    const session = getOrCreateSession(sessionId);
+    const requestedRunMode = req.query.runMode || null;
+    const session = getOrCreateSession(sessionId, requestedRunMode);
     const scenario = scenarioGraph[session.scenarioId];
     const npc = npcProfiles[session.npcId];
 
@@ -78,6 +106,9 @@ router.get('/init', (req, res) => {
 
     const liveScore = computeLiveRapportScore(session);
     const pacing = getPacingInfo(session.round, session.factsVerified);
+    const effectiveOpeningLine = (session.runMode === 'ng_plus' && session.activeTwist?.openingLine)
+      ? session.activeTwist.openingLine
+      : scenario.openingLine;
 
     res.json({
       success: true,
@@ -85,6 +116,18 @@ router.get('/init', (req, res) => {
         scenarioId: scenario.scenarioId,
         title: scenario.title,
         sceneVisual: scenario.sceneVisual,
+        runMode: session.runMode,
+        activeTwist: session.activeTwist
+          ? {
+              twistId: session.activeTwist.twistId,
+              title: session.activeTwist.title,
+              phoneContextHint: session.activeTwist.phoneContextHint
+            }
+          : null,
+        twistAddressed: session.twistAddressed,
+        subtitleRevealedCount: session.subtitleRevealedCount,
+        revealedIndices: session.revealedIndices,
+        usedCardsMode: session.usedCardsMode,
         npc: {
           npcId: npc.npcId,
           name: npc.name,
@@ -95,7 +138,7 @@ router.get('/init', (req, res) => {
         },
         ttsModel: TTS_MODEL,
         dramaticContext: scenario.dramaticContext,
-        openingLine: scenario.openingLine,
+        openingLine: effectiveOpeningLine,
         objectiveDescription: scenario.objectiveDescription,
         inventoryWeapons: scenario.inventoryWeapons,
         smartSnapMatrix: scenario.smartSnapMatrix,
@@ -124,7 +167,7 @@ router.get('/init', (req, res) => {
  */
 router.post('/chat', async (req, res) => {
   try {
-    const { sessionId = 'default', message, usedFullScaffold, ttsEnabled, audioBase64, audioMimeType } = req.body || {};
+    const { sessionId = 'default', message, usedFullScaffold, ttsEnabled, audioBase64, audioMimeType, inputMode } = req.body || {};
 
     let userMessage = message ? message.trim() : '';
     let isVoiceInput = false;
@@ -157,6 +200,9 @@ router.post('/chat', async (req, res) => {
     const session = getOrCreateSession(sessionId);
     if (usedFullScaffold === true) {
       session.usedFullScaffold = true;
+    }
+    if (!isVoiceInput && inputMode === 'cards') {
+      session.usedCardsMode = true;
     }
 
     // 核心拦截：如果已结案落锁，直接拒绝发对白
@@ -202,8 +248,15 @@ router.post('/chat', async (req, res) => {
       npc,
       history: session.history,
       userMessage: userMessage,
-      pacingPhase: currentPacing.label
+      pacingPhase: currentPacing.label,
+      runMode: session.runMode,
+      activeTwist: session.activeTwist,
+      twistAlreadyAddressed: session.twistAddressed
     });
+
+    if (session.runMode === 'ng_plus' && aiResult.evaluation?.twistAddressed === true) {
+      session.twistAddressed = true;
+    }
 
     session.round += 1;
     session.history.push({
@@ -213,7 +266,8 @@ router.post('/chat', async (req, res) => {
       evaluation: {
         toneScore: aiResult.evaluation.toneScore,
         toneFeedback: aiResult.evaluation.toneFeedback,
-        dynamicTag: penaltyTag || aiResult.evaluation.dynamicTag
+        dynamicTag: penaltyTag || aiResult.evaluation.dynamicTag,
+        twistAddressed: aiResult.evaluation.twistAddressed !== false
       }
     });
     session.history.push({
@@ -235,7 +289,7 @@ router.post('/chat', async (req, res) => {
     // 当完成第 3 回合对白时，自动触发结案落锁，打印消费结案小票
     if (session.round >= 3) {
       isAutoCompleted = true;
-      const statement = message.trim();
+      const statement = userMessage;
       const avgTone = session.toneScores.length > 0
         ? session.toneScores.reduce((a, b) => a + b, 0) / session.toneScores.length
         : 15;
@@ -246,6 +300,10 @@ router.post('/chat', async (req, res) => {
         avgToneScore: avgTone,
         penaltyPoints: session.penaltyPoints,
         usedFullScaffold: session.usedFullScaffold,
+        usedCardsMode: session.usedCardsMode,
+        runMode: session.runMode,
+        subtitleRevealedCount: session.subtitleRevealedCount,
+        twistAddressed: session.twistAddressed,
         scenario
       });
 
@@ -261,6 +319,14 @@ router.post('/chat', async (req, res) => {
         finalScore: settlementMath.finalScore,
         stars: settlementMath.stars,
         outcome: settlementMath.outcome,
+        runMode: settlementMath.runMode,
+        prestigeTier: settlementMath.prestigeTier,
+        prestigeLabel: settlementMath.prestigeLabel,
+        prestigeReason: settlementMath.prestigeReason,
+        privilegeUnlocked: settlementMath.privilegeUnlocked,
+        twistAddressed: settlementMath.twistAddressed,
+        subtitleRevealedCount: settlementMath.subtitleRevealedCount,
+        usedCardsMode: settlementMath.usedCardsMode,
         title: settlementMath.title,
         storyText: settlementMath.storyText,
         scaffoldCapTriggered: settlementMath.scaffoldCapTriggered,
@@ -307,8 +373,13 @@ router.post('/chat', async (req, res) => {
         evaluation: {
           toneScore: aiResult.evaluation.toneScore,
           toneFeedback: aiResult.evaluation.toneFeedback,
-          dynamicTag: penaltyTag || aiResult.evaluation.dynamicTag
+          dynamicTag: penaltyTag || aiResult.evaluation.dynamicTag,
+          twistAddressed: aiResult.evaluation.twistAddressed !== false
         },
+        runMode: session.runMode,
+        twistAddressed: session.twistAddressed,
+        subtitleRevealedCount: session.subtitleRevealedCount,
+        usedCardsMode: session.usedCardsMode,
         currentRound: session.round,
         pacing: updatedPacing,
         liveScore: autoSettlement ? autoSettlement.finalScore : liveScore,
@@ -415,6 +486,10 @@ router.post('/resolve-check', async (req, res) => {
       avgToneScore: avgTone,
       penaltyPoints: session.penaltyPoints,
       usedFullScaffold: session.usedFullScaffold,
+      usedCardsMode: session.usedCardsMode,
+      runMode: session.runMode,
+      subtitleRevealedCount: session.subtitleRevealedCount,
+      twistAddressed: session.twistAddressed,
       scenario
     });
 
@@ -431,6 +506,14 @@ router.post('/resolve-check', async (req, res) => {
       finalScore: settlementMath.finalScore,
       stars: settlementMath.stars,
       outcome: settlementMath.outcome,
+      runMode: settlementMath.runMode,
+      prestigeTier: settlementMath.prestigeTier,
+      prestigeLabel: settlementMath.prestigeLabel,
+      prestigeReason: settlementMath.prestigeReason,
+      privilegeUnlocked: settlementMath.privilegeUnlocked,
+      twistAddressed: settlementMath.twistAddressed,
+      subtitleRevealedCount: settlementMath.subtitleRevealedCount,
+      usedCardsMode: settlementMath.usedCardsMode,
       title: settlementMath.title,
       storyText: settlementMath.storyText,
       scaffoldCapTriggered: settlementMath.scaffoldCapTriggered,
@@ -458,14 +541,42 @@ router.post('/resolve-check', async (req, res) => {
 });
 
 /**
+ * POST /api/avg-test/reveal-subtitle
+ * 二周目盲听模式：记录玩家点击“显露台词”次数（触发后剥夺黑金纯度认证）
+ */
+router.post('/reveal-subtitle', (req, res) => {
+  try {
+    const { sessionId = 'default', bubbleKey = 'unknown' } = req.body || {};
+    const session = getOrCreateSession(sessionId);
+    if (!session.revealedIndices.includes(bubbleKey)) {
+      session.revealedIndices.push(bubbleKey);
+      session.subtitleRevealedCount += 1;
+    }
+    res.json({
+      success: true,
+      data: {
+        subtitleRevealedCount: session.subtitleRevealedCount,
+        revealedIndices: session.revealedIndices
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * POST /api/avg-test/reset
  * GET  /api/avg-test/reset
  */
 router.all('/reset', (req, res) => {
   try {
     const sessionId = req.body?.sessionId || req.query?.sessionId || 'default';
+    const runMode = req.body?.runMode || req.query?.runMode || null;
     sessions.delete(sessionId);
-    res.json({ success: true, message: 'Session reset successfully' });
+    if (runMode) {
+      getOrCreateSession(sessionId, runMode);
+    }
+    res.json({ success: true, message: 'Session reset successfully', runMode: runMode || 'standard' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

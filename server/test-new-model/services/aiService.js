@@ -36,7 +36,25 @@ const DEFAULT_MODEL = 'gemini-2.5-flash';
  * 玩家与 NPC 日常对白交互 (语用天平实时评估)
  * 包含：NPC 深度拟真回应 + 礼貌度/得体度即时打分 + 极简游戏动态浮标标签
  */
-async function chatWithNpc({ scenario, npc, history = [], userMessage, pacingPhase = 'Phase 1: 核实破冰期' }) {
+async function chatWithNpc({
+  scenario,
+  npc,
+  history = [],
+  userMessage,
+  pacingPhase = 'Phase 1: 核实破冰期',
+  runMode = 'standard',
+  activeTwist = null,
+  twistAlreadyAddressed = false
+}) {
+  const isNgPlusTwist = runMode === 'ng_plus' && Boolean(activeTwist);
+  const twistPromptBlock = isNgPlusTwist
+    ? `\n[NG+ TELEPHONE BLIND-LISTENING TWIST - CRITICAL]:
+- Mode: New Game+ (Midnight Inner-Line Phone Call). The player CANNOT see your text by default and must listen to solve this unexpected twist:
+  * Twist Title: ${activeTwist.title}
+  * Directive: ${activeTwist.aiTwistInstruction}
+- Already resolved in an earlier turn?: ${twistAlreadyAddressed ? 'YES (keep twistAddressed=true while continuing the booking conversation naturally)' : 'NO (strictly verify if THIS message directly addresses the twist!)'}
+- Anti-Rote-Memorization Check: If the player simply recites a memorized 1st-run script (e.g., only saying "LON-88219" or "backup terminal" without acknowledging the new issue you just raised over the phone), set twistAddressed=false, reply in-character pressing them to answer the issue, and point out in toneFeedback that they missed the NG+ twist.\n`
+    : '';
   const { generateObject, google } = await getAi();
   const ctx = scenario.dramaticContext;
 
@@ -64,7 +82,7 @@ ${scenario.objectiveDescription}
 [Target Weapon Phrases in this scene]:
 ${weaponsList}
 
-[Instructions]:
+${twistPromptBlock}[Instructions]:
 1. Roleplay as ${npc.name}. Respond strictly in authentic, spoken English matching your British gentleman or busy barista personality (1-3 natural sentences).
 2. Choose one emotion tag from: ["neutral", "skeptical", "annoyed", "pleased"].
 3. Evaluate the player's English tone, politeness, and especially PRAGMATIC SOFTENERS (语用润滑剂):
@@ -75,6 +93,7 @@ ${weaponsList}
    - toneFeedback: Short Chinese feedback highlighting pragmatic stance (e.g. "巧妙运用 'I was wondering if' 委婉试探，毫无命令压迫感" or "语气直白生硬，缺乏成年人社交必要的情态缓冲").
    - dynamicTag: A punchy 2-4 word gamer tag with an emoji (e.g. "🎩 高情商委婉", "⚡ 证据确凿", "⚠️ 缺乏敬语", "🧊 命令语气").
    - antiOtkTriggered: boolean (true ONLY IF player asks for complimentary upgrade prematurely in Phase 1 before identifying booking or name).
+   - twistAddressed: boolean (${isNgPlusTwist ? 'true ONLY IF the player directly addressed the NG+ phone twist above OR it was already resolved earlier; false if they ignored it or recited an unrelated 1st-run script' : 'always true in standard mode'}).
 `;
 
   const schema = z.object({
@@ -84,7 +103,8 @@ ${weaponsList}
       toneScore: z.number().min(0).max(30).describe("礼貌得体度得分 (0 ~ 30)"),
       toneFeedback: z.string().describe("礼貌评价简评 (中文)"),
       dynamicTag: z.string().describe("极简浮动标签，如 '🎩 优雅得体'"),
-      antiOtkTriggered: z.boolean().describe("是否触发了第一阶段抢跑索要升房")
+      antiOtkTriggered: z.boolean().describe("是否触发了第一阶段抢跑索要升房"),
+      twistAddressed: z.boolean().describe("二周目突发变故是否已被玩家正面听懂并回应（非二周目固定为 true）")
     })
   });
 
@@ -123,6 +143,7 @@ A deterministic Rapport Scale settlement was executed.
 - Total Score: ${settlement.finalScore} / 100
 - Outcome: ${settlement.outcome}
 - Breakdown: Fact Clarity=${settlement.scoreBreakdown.factClarityScore}, Target Chunks=${settlement.scoreBreakdown.targetChunksScore}, Tone=${settlement.scoreBreakdown.toneScore}, Deductions=${settlement.scoreBreakdown.deductions}
+- Mode & Prestige Tier: ${settlement.runMode === 'ng_plus' ? 'NG+ Midnight Phone Call' : 'Standard In-Person'} | ${settlement.prestigeTier || 'standard'} (Twist Addressed=${settlement.twistAddressed !== false})
 
 [Ending Description]:
 ${settlement.title}: ${settlement.storyText}

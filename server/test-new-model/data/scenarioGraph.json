@@ -228,6 +228,32 @@
         "chunk_deposit": "Here is my credit card for your verification; could you confirm if the deposit is refundable?"
       }
     },
+    "ngPlusTwists": [
+      {
+        "twistId": "twist_wrong_date",
+        "title": "突发变故：预订日期错位 + 吸烟房危机",
+        "phoneContextHint": "📞 二周目突发：Arthur 在午夜内线中指出你的订单显示为【明天 (TOMORROW)】而非今晚，仅剩的最后一间客房需要额外 £30 手续费或接受吸烟房。",
+        "openingLine": "Good evening, The Royal Garden Hotel night desk, Arthur speaking. Wait—looking closely at LON-88219 here... it actually shows your check-in date is TOMORROW, not tonight. We only have one last smoking room left unless you'd like to pay a £30 same-night transfer fee. How would you like to proceed?",
+        "aiTwistInstruction": "You caught that booking LON-88219 is actually dated for TOMORROW (not tonight), and the only empty room has a £30 same-night transfer fee or is a smoking room. Require the player to address this date mismatch, fee/non-smoking request, or politely negotiate an exemption. If they blindly ignore your remark and repeat a memorized script about backup terminal without acknowledging tonight vs tomorrow / smoking room / £30 fee, stay firm, mark twistAddressed as false, and call out that they didn't address the date issue.",
+        "twistKeywords": ["tomorrow", "tonight", "date", "smoking", "non-smoking", "fee", "30", "transfer", "waive", "mistake", "wrong date", "check-in"]
+      },
+      {
+        "twistId": "twist_courtyard_deposit",
+        "title": "突发变故：公司卡预授权冻结 + 无窗庭院房",
+        "phoneContextHint": "📞 二周目突发：系统提示原企业担保卡预授权失败，仅剩一间无窗低楼层庭院房，需要你现场口头确认新担保或协商升级。",
+        "openingLine": "Night concierge at The Royal Garden Hotel, Arthur speaking. I see the reservation under Alex, however our night audit flags that your corporate card authorization declined ten minutes ago, and the only unallocated room left is a ground-floor courtyard room facing the kitchen alley. Could you clarify how you'd like to settle the £200 security deposit first?",
+        "aiTwistInstruction": "Your night audit shows the corporate card deposit (£200 security deposit) declined, and the default room is a noisy ground-floor courtyard room. Require the player to directly address the payment/card/deposit issue or request a quieter high-floor non-courtyard room. If they ignore the card/deposit/courtyard point completely and just recite generic phrases like 'backup terminal', stay skeptical and mark twistAddressed as false.",
+        "twistKeywords": ["card", "corporate", "deposit", "200", "authorize", "authorization", "payment", "pay", "courtyard", "quiet", "higher floor", "declined", "settle"]
+      },
+      {
+        "twistId": "twist_midnight_cutoff",
+        "title": "突发变故：午夜 12 点超期释放 + 连住筹码博弈",
+        "phoneContextHint": "📞 二周目突发：已过午夜 12 点保留红线，订单被自动归入 No-Show 候补池，恢复需加收 £40 滞留费（除非连住 3 晚以上可申请经理豁免）。",
+        "openingLine": "The Royal Garden Hotel night reception, Arthur on the line. I'm terribly sorry, sir, it is now past our midnight release cutoff, so the system automatically flagged your booking as a late no-show. Reactivating it normally carries a £40 reinstatement surcharge unless you're staying more than three nights with us. May I ask how many nights you booked for?",
+        "aiTwistInstruction": "Because it is past the midnight cutoff, the booking is flagged as a late no-show carrying a £40 surcharge unless staying more than 3 nights (or politely requesting a waiver due to flight/traffic delay). Require the player to directly answer how many nights they are staying, explain the late arrival, or address the £40 surcharge. If they ignore the late arrival/nights/£40 fee question and just spit out unrelated memorized words, press them again and mark twistAddressed as false.",
+        "twistKeywords": ["midnight", "late", "delay", "flight", "nights", "four", "five", "week", "staying", "40", "surcharge", "fee", "waive", "no-show", "three"]
+      }
+    ],
     "climaxThresholdRound": 2,
     "endings": {
       "critical_success": {
