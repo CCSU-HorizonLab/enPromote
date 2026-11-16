@@ -84,6 +84,7 @@ function evaluateRapportSettlement({
   usedCardsMode = false,
   runMode = 'standard',
   subtitleRevealedCount = 0,
+  cluePeekCount = 0,
   twistAddressed = true,
   scenario
 }) {
@@ -146,16 +147,18 @@ function evaluateRapportSettlement({
 
   const isNgPlus = runMode === 'ng_plus';
   const roteMemorizationPenalty = (isNgPlus && !twistAddressed) ? 20 : 0;
-  const effectiveDeductions = deductions + roteMemorizationPenalty;
-  const effectiveFinalScore = Math.max(0, Math.min(100, finalScore - roteMemorizationPenalty));
+  const cluePeekPenalty = isNgPlus ? (cluePeekCount >= 2 ? 10 : (cluePeekCount === 1 ? 5 : 0)) : 0;
+  const extraNgPenalty = roteMemorizationPenalty + cluePeekPenalty;
+  const effectiveDeductions = deductions + extraNgPenalty;
+  const effectiveFinalScore = Math.max(0, Math.min(100, finalScore - extraNgPenalty));
 
   let effectiveStars = stars;
   let effectiveOutcome = outcome;
-  if (roteMemorizationPenalty > 0) {
+  if (extraNgPenalty > 0) {
     if (effectiveFinalScore >= 85 && !scaffoldCapTriggered) {
       effectiveStars = 3;
       effectiveOutcome = 'critical_success';
-    } else if (effectiveFinalScore >= 60) {
+    } else if (effectiveFinalScore >= 65) {
       effectiveStars = 2;
       effectiveOutcome = 'success';
     } else {
@@ -172,29 +175,34 @@ function evaluateRapportSettlement({
     : '完成主线交涉；得分达到 85+ 并满足脱稿/盲听条件可解锁高阶印记';
   let privilegeUnlocked = null;
 
-  if (usedFullScaffold || (isNgPlus && subtitleRevealedCount > 0)) {
+  if (usedFullScaffold || (isNgPlus && (subtitleRevealedCount > 0 || cluePeekCount >= 2))) {
     prestigeTier = 'assisted';
     if (usedFullScaffold) {
       prestigeLabel = '📑 小抄辅助印记';
       prestigeReason = '使用了全句提示小抄，星级上限及含金量受限';
-    } else {
+    } else if (subtitleRevealedCount > 0) {
       prestigeLabel = '👁️ 破盲显露印记';
       prestigeReason = `二周目盲听途中显露了 ${subtitleRevealedCount} 次英文台词，失去黑金纯度`;
+    } else {
+      prestigeLabel = '💡 多次线索提示印记';
+      prestigeReason = `二周目盲听途中查看了 ${cluePeekCount} 次要点线索（限 1 次内可保留黑金）`;
     }
-  } else if (isNgPlus && effectiveStars === 3 && !usedCardsMode && twistAddressed && subtitleRevealedCount === 0) {
+  } else if (isNgPlus && effectiveStars === 3 && !usedCardsMode && twistAddressed && subtitleRevealedCount === 0 && cluePeekCount <= 1) {
     prestigeTier = 'black_gold';
     prestigeLabel = '🎧 黑金·盲听实战大师';
-    prestigeReason = '二周目 0 次显露台词纯盲听 + 临场拆解突发变故 + 纯语音/脱稿拿下顶层套房！';
+    prestigeReason = cluePeekCount === 1
+      ? '二周目 0 显露台词（借 1 次要点线索 -5 分缓冲）仍稳取 3★，成功化解突发变故！'
+      : '二周目 0 次显露台词纯盲听 + 临场拆解突发变故 + 纯语音/脱稿拿下顶层套房！';
     privilegeUnlocked = {
       unlocked: true,
       badge: '🗝️ 模块 A 免修特权卡',
-      description: '已解锁【酒店值机场景】模块 A 词库 10 词免修与 Boss 关卡直通资格！'
+      description: '已解锁【酒店值机场景】模块 A 核心词库免修与 Boss 关卡直通资格！'
     };
   } else if (effectiveStars === 3 && !usedCardsMode) {
     prestigeTier = 'authentic';
     prestigeLabel = '🥈 脱稿交涉印记';
     prestigeReason = isNgPlus
-      ? '二周目脱稿拿下 3 星（需保持 0 显露台词且完整回应突发变故方可晋升黑金）'
+      ? '二周目脱稿拿下 3 星（需保持 0 显露台词、线索≤1次且完整回应突发变故方可晋升黑金）'
       : '一周目无小抄脱稿/语音拿下最高 3 星结局，已具备挑战二周目盲听的实力！';
   }
 
@@ -211,6 +219,7 @@ function evaluateRapportSettlement({
     privilegeUnlocked,
     twistAddressed,
     subtitleRevealedCount,
+    cluePeekCount,
     usedCardsMode,
     scaffoldCapTriggered,
     usedFullScaffold,
@@ -220,8 +229,9 @@ function evaluateRapportSettlement({
       domainChunksScore,      // 0 ~ 15 (场景业务事实零件 What)
       targetChunksScore,      // 0 ~ 30 (高级场景词块总计)
       toneScore,              // 0 ~ 30 (英伦礼貌与风度)
-      deductions: effectiveDeductions,             // 扣减分（含死记硬背罚分）
+      deductions: effectiveDeductions,             // 扣减分（含死记硬背及线索缓冲罚分）
       roteMemorizationPenalty,
+      cluePeekPenalty,
       scaffoldCapTriggered    // 是否因抄小抄被压制
     },
     title: scaffoldCapTriggered ? '【达成及格 · 照本宣科】标准大床房入住 (2星小抄上限)' : endingMeta.title,

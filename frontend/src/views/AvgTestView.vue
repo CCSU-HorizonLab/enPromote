@@ -216,10 +216,23 @@
                     {{ isPlayingVoice('opening') ? '来电播放中，请听清对方提出的突发状况...' : '点击收听午夜来电语音（文本已盲听遮罩）' }}
                   </span>
                 </div>
+                <div v-if="peekedClueKeys.includes('opening')" class="blind-clue-strip">
+                  <span class="clue-label">💡 要点线索：</span>
+                  <span v-for="chip in getClueChipsForBubble('opening', scenarioData.openingLine)" :key="chip" class="clue-chip">
+                    {{ chip }}
+                  </span>
+                </div>
                 <div class="blind-actions-row">
-                  <span class="blind-blurred-preview">██████ █████ ███ ██████ ████████...</span>
+                  <button
+                    v-if="!peekedClueKeys.includes('opening')"
+                    class="btn-peek-clue"
+                    @click.stop="peekClue('opening')"
+                    title="仅查看要点关键词线索（限1次内可保留黑金，扣5分）"
+                  >
+                    💡 要点线索 ({{ cluePeekCount === 0 ? '保黑金-5分' : '再看破纯度' }})
+                  </button>
                   <button class="btn-reveal-subtitle" @click.stop="revealSubtitle('opening')">
-                    👁️ 显露台词 (将失去黑金印记)
+                    👁️ 显露完整台词 (破黑金)
                   </button>
                 </div>
               </div>
@@ -269,10 +282,23 @@
                     {{ isPlayingVoice('msg_' + index) ? 'Arthur 正在电话回应中...' : '点击重听该回合来电语音' }}
                   </span>
                 </div>
+                <div v-if="peekedClueKeys.includes('msg_' + index)" class="blind-clue-strip">
+                  <span class="clue-label">💡 要点线索：</span>
+                  <span v-for="chip in getClueChipsForBubble('msg_' + index, msg.content)" :key="chip" class="clue-chip">
+                    {{ chip }}
+                  </span>
+                </div>
                 <div class="blind-actions-row">
-                  <span class="blind-blurred-preview">█████ ███████ ████ ███████...</span>
+                  <button
+                    v-if="!peekedClueKeys.includes('msg_' + index)"
+                    class="btn-peek-clue"
+                    @click.stop="peekClue('msg_' + index)"
+                    title="仅查看要点关键词线索（限1次内可保留黑金，扣5分）"
+                  >
+                    💡 要点线索 ({{ cluePeekCount === 0 ? '保黑金-5分' : '再看破纯度' }})
+                  </button>
                   <button class="btn-reveal-subtitle" @click.stop="revealSubtitle('msg_' + index)">
-                    👁️ 显露台词 (将失去黑金印记)
+                    👁️ 显露完整台词 (破黑金)
                   </button>
                 </div>
               </div>
@@ -395,9 +421,13 @@
                   <span>📵 未回应二周目变故 (防死背扣减)：</span>
                   <strong class="color-danger">-{{ settlementData.scoreBreakdown.roteMemorizationPenalty }} 分</strong>
                 </div>
-                <div class="b-row penalty-row" v-if="(settlementData.scoreBreakdown.deductions - (settlementData.scoreBreakdown.roteMemorizationPenalty || 0)) > 0">
+                <div class="b-row penalty-row" v-if="(settlementData.scoreBreakdown.cluePeekPenalty || 0) > 0">
+                  <span>💡 要点线索缓冲查看扣减：</span>
+                  <strong class="color-warning">-{{ settlementData.scoreBreakdown.cluePeekPenalty }} 分</strong>
+                </div>
+                <div class="b-row penalty-row" v-if="(settlementData.scoreBreakdown.deductions - (settlementData.scoreBreakdown.roteMemorizationPenalty || 0) - (settlementData.scoreBreakdown.cluePeekPenalty || 0)) > 0">
                   <span>违规/操之过急扣减：</span>
-                  <strong>-{{ settlementData.scoreBreakdown.deductions - (settlementData.scoreBreakdown.roteMemorizationPenalty || 0) }} 分</strong>
+                  <strong>-{{ settlementData.scoreBreakdown.deductions - (settlementData.scoreBreakdown.roteMemorizationPenalty || 0) - (settlementData.scoreBreakdown.cluePeekPenalty || 0) }} 分</strong>
                 </div>
                 <div class="b-row cap-row" v-if="settlementData.scaffoldCapTriggered">
                   <span>小抄使用封顶规则：</span>
@@ -759,6 +789,8 @@ const ngCallStarted = ref(false);
 const activeTwist = ref<any>(null);
 const revealedBubbles = ref<string[]>([]);
 const subtitleRevealedCount = ref(0);
+const cluePeekCount = ref(0);
+const peekedClueKeys = ref<string[]>([]);
 const twistAddressed = ref(true);
 const liveScore = ref(15);
 const factsVerified = ref<string[]>([]);
@@ -780,6 +812,55 @@ function isBubbleMasked(bubbleKey: string) {
   if (runMode.value !== 'ng_plus') return false;
   if (isCompleted.value) return false;
   return !revealedBubbles.value.includes(bubbleKey);
+}
+
+function getClueChipsForBubble(bubbleKey: string, content = ''): string[] {
+  const chips: string[] = [];
+  if (bubbleKey === 'opening' && activeTwist.value) {
+    if (activeTwist.value.title) {
+      chips.push(activeTwist.value.title.replace(/^突发变故：/, '📌 '));
+    }
+    const kws = Array.isArray(activeTwist.value.twistKeywords)
+      ? activeTwist.value.twistKeywords.slice(0, 4)
+      : [];
+    if (kws.length > 0) {
+      chips.push(`关键词: ${kws.join(' / ')}`);
+    }
+    return chips;
+  }
+
+  const numOrTimeMatches = String(content || '').match(/(?:£\d+|\$\d+|tomorrow|tonight|midnight|\d+\s+nights?|deposit|courtyard|surcharge|smoking|authorization|passport|confirmation)/gi) || [];
+  const uniqueMatches = Array.from(new Set(numOrTimeMatches.map(m => m.trim()))).slice(0, 5);
+  if (uniqueMatches.length > 0) {
+    chips.push(`核心词: ${uniqueMatches.join(' · ')}`);
+  } else {
+    chips.push('留意对方核实条件与语气要求');
+  }
+  return chips;
+}
+
+async function peekClue(bubbleKey: string) {
+  if (peekedClueKeys.value.includes(bubbleKey)) return;
+  peekedClueKeys.value = [...peekedClueKeys.value, bubbleKey];
+  cluePeekCount.value += 1;
+  if (cluePeekCount.value <= 1) {
+    showToast('💡 已解锁要点线索（-5分缓冲，未显露原文仍保留黑金冲刺资格！）');
+  } else {
+    showToast('💡 已查看第 2 次线索（累计查看超 1 次，本局将不再授予黑金纯度）');
+  }
+  try {
+    const res = await fetch('/api/avg-test/peek-clue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: 'default', bubbleKey })
+    });
+    const json = await res.json();
+    if (json?.success && typeof json?.data?.liveScore === 'number') {
+      liveScore.value = json.data.liveScore;
+    }
+  } catch (err) {
+    console.warn('记录查看要点线索失败:', err);
+  }
 }
 
 async function revealSubtitle(bubbleKey: string) {
@@ -861,7 +942,6 @@ function stopCurrentAudio() {
 async function playSpeech(text: string, key: string, preloadedAudio?: string) {
   if (!text) return;
 
-  // 点击正在播放的按钮 -> 停止播放
   if (currentPlayingKey.value === key) {
     stopCurrentAudio();
     return;
@@ -889,7 +969,6 @@ async function playSpeech(text: string, key: string, preloadedAudio?: string) {
         audioCacheMap.set(key, audioUrl);
         audioCacheMap.set(text, audioUrl);
       } else {
-        // Fallback: 浏览器原生 SpeechSynthesis 兜底朗读
         speakWithBrowser(text, key);
         return;
       }
@@ -1408,6 +1487,8 @@ async function loadInitData(targetMode?: 'standard' | 'ng_plus') {
       twistAddressed.value = json.data.twistAddressed !== false;
       subtitleRevealedCount.value = json.data.subtitleRevealedCount || 0;
       revealedBubbles.value = json.data.revealedIndices || [];
+      cluePeekCount.value = json.data.cluePeekCount || 0;
+      peekedClueKeys.value = json.data.peekedClueKeys || [];
       currentRound.value = json.data.currentRound || 0;
       liveScore.value = json.data.liveScore || 15;
       pacingInfo.value = json.data.pacing;
@@ -1472,6 +1553,7 @@ async function sendMessage() {
       usedFullScaffold.value = !!json.data.usedFullScaffold;
       twistAddressed.value = json.data.twistAddressed !== false;
       subtitleRevealedCount.value = json.data.subtitleRevealedCount ?? subtitleRevealedCount.value;
+      cluePeekCount.value = json.data.cluePeekCount ?? cluePeekCount.value;
       factsVerified.value = json.data.factsVerified || [];
       weaponsHit.value = json.data.weaponsHit || [];
 
@@ -1570,6 +1652,8 @@ async function resetSession(targetMode?: 'standard' | 'ng_plus') {
     messages.value = [];
     revealedBubbles.value = [];
     subtitleRevealedCount.value = 0;
+    cluePeekCount.value = 0;
+    peekedClueKeys.value = [];
     twistAddressed.value = nextMode !== 'ng_plus';
     activeTwist.value = null;
     ngCallStarted.value = nextMode !== 'ng_plus';
@@ -3632,5 +3716,49 @@ onMounted(async () => {
   border-radius: 999px;
   font-size: 11.5px;
   font-weight: 600;
+}
+
+.blind-clue-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+}
+
+.clue-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #fde68a;
+}
+
+.clue-chip {
+  background: rgba(15, 23, 42, 0.85);
+  color: #fef08a;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.btn-peek-clue {
+  background: rgba(30, 41, 59, 0.9);
+  color: #fde68a;
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-peek-clue:hover {
+  background: rgba(245, 158, 11, 0.2);
 }
 </style>

@@ -9,6 +9,9 @@ const { logger } = require('../utils/logger');
 const aiPromptJson = require("../ai/aiPrompt.json");
 const aiChatPrompts = require("../ai/aiChatPrompts.json");
 const AiChatSession = require('../modules/AiChatSession');
+const User = require('../modules/User');
+const { getSceneWordBank, findSceneWord } = require('../config/sceneVocabularies');
+const { ensureSceneWordDoc } = require('../utils/sceneWordSync');
 const openai = new OpenAI({
     baseURL: baseUrl,
     apiKey
@@ -261,7 +264,7 @@ router.post('/ai_generate_question', async (req, res) => {
     }
 })
 
-// 获取用户需要练习的单词列表
+// 获取用户需要练习的单词列表（按当前场景词库对齐）
 router.get('/practice_words', async (req, res) => {
     try {
         const { userid } = req.session;
@@ -269,9 +272,36 @@ router.get('/practice_words', async (req, res) => {
             return res.json({ code: 401, message: '未登录' });
         }
 
-        // 和ai练习的单词一样10个
+        const user = await User.findById(userid).select('currentChapter');
+        const requestedChapter = String(req.query.chapter || user?.currentChapter || 'A').trim().toUpperCase();
+        const sceneWordBank = getSceneWordBank(requestedChapter);
+
+        if (sceneWordBank && sceneWordBank.length > 0) {
+            const words = await Promise.all(
+                sceneWordBank.slice(0, 12).map(async (item) => {
+                    const wordDoc = await ensureSceneWordDoc(item, requestedChapter);
+                    return {
+                        id: wordDoc?._id || item.word,
+                        word: item.word,
+                        chineseMeaning: item.mean || wordDoc?.chineseMeaning || '暂无中文释义',
+                        phonetic: item.phonetic_symbol || wordDoc?.phonetics?.[0]?.text || '',
+                        example: item.example || '',
+                        combatRole: item.combatRole || 'domain_chunk'
+                    };
+                })
+            );
+            return res.json({
+                code: 200,
+                message: '获取成功',
+                data: {
+                    words,
+                    total: words.length
+                }
+            });
+        }
+
         const userWords = await UserWord
-            .find({ userId: userid })
+            .find({ userId: userid, sence: requestedChapter })
             .sort({ priority: -1 })
             .limit(10);
 
@@ -280,11 +310,12 @@ router.get('/practice_words', async (req, res) => {
             if (!wordObj) {
                 return null;
             }
+            const catalog = findSceneWord(wordObj.word, requestedChapter);
             return {
                 id: wordObj._id,
                 word: wordObj.word,
-                chineseMeaning: wordObj.chineseMeaning || '暂无中文释义',
-                phonetic: wordObj.phonetics && wordObj.phonetics[0] ? wordObj.phonetics[0].text : '',
+                chineseMeaning: catalog?.mean || wordObj.chineseMeaning || '暂无中文释义',
+                phonetic: catalog?.phonetic_symbol || (wordObj.phonetics && wordObj.phonetics[0] ? wordObj.phonetics[0].text : ''),
                 status: data.status,
                 priority: data.priority,
                 reviewCounts: data.reviewCounts
@@ -304,7 +335,6 @@ router.get('/practice_words', async (req, res) => {
 
     } catch (error) {
         logger.error('获取练习单词列表失败:', error);
-        // console.error('获取练习单词列表失败:', error);
         res.json({
             code: 500,
             message: '服务器内部错误'
@@ -548,8 +578,7 @@ router.post('/startTaskChat', async (req, res) => {
         }
 
         // 优先使用请求参数中的章节，其次使用用户当前章节
-        const { chapter } = req.body;
-        const User = require('../modules/User');
+        const { chapter, forceNew = false } = req.body || {};
         const user = await User.findById(userid);
         if (!user) {
             return res.json({ code: 404, message: '用户不存在' });
@@ -570,9 +599,14 @@ router.post('/startTaskChat', async (req, res) => {
             chapter: scene
         });
 
-        if (existingSession) {
+        const sceneConfig = aiChatPrompts[scene];
+        const expectedTaskSig = (sceneConfig.tasks || []).map(t => t.name).join('|');
+        const sessionTaskSig = existingSession
+            ? (existingSession.tasks || []).map(t => t.name).join('|')
+            : '';
+
+        if (existingSession && !forceNew && expectedTaskSig === sessionTaskSig) {
             console.log('继续现有会话')
-            const sceneConfig = aiChatPrompts[existingSession.scene];
             return res.json({
                 code: 200,
                 message: '继续现有会话',
@@ -592,9 +626,14 @@ router.post('/startTaskChat', async (req, res) => {
             });
         }
 
+        if (existingSession) {
+            existingSession.status = 'abandoned';
+            existingSession.endTime = new Date();
+            await existingSession.save();
+        }
+
         // 创建新的会话
         const sessionId = `${userid}_${Date.now()}`;
-        const sceneConfig = aiChatPrompts[scene];
 
         const minTasksCompleted = Math.max(1, Math.floor(sceneConfig.tasks.length * 0.6));
         const newSession = new AiChatSession({

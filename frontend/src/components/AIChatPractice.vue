@@ -42,6 +42,15 @@
           </div>
         </div>
         <div class="chat-actions">
+          <button
+            class="action-btn audio-toggle-btn"
+            :class="{ active: autoSpeakReply }"
+            @click="toggleAutoSpeak"
+            :title="autoSpeakReply ? '关闭 AI 回复自动朗读' : '开启 AI 回复自动朗读'"
+          >
+            {{ autoSpeakReply ? '🔊' : '🔇' }}
+          </button>
+          <button class="action-btn" @click="restartWarmupChat" title="重新开始本轮对话">🔄</button>
           <button class="action-btn" @click="showPracticeWords" title="练习单词">📚</button>
           <button class="action-btn" @click="exitChat" title="退出对话">❌</button>
         </div>
@@ -93,8 +102,8 @@
       <div class="messages-container" ref="messagesContainer">
         <div v-if="messages.length === 0" class="welcome-message">
           <div class="welcome-icon">👋</div>
-          <h3>欢迎来到AI对话练习！</h3>
-          <p>开始你的第一次对话吧，AI老师会帮助你练习英语单词。</p>
+          <h3>欢迎来到日间礼宾热身对话！</h3>
+          <p>先在轻松合作的氛围中把刚才学过的核心词说出口，通关后即可挑战深夜 Arthur Boss 战。</p>
         </div>
 
         <div v-for="message in messages" :key="message.id" class="message-wrapper">
@@ -105,7 +114,17 @@
             </div>
             <div class="message-content">
               <div class="message-text" v-html="renderMessageContent(message.content)"></div>
-              <div class="message-time">{{ formatTime(message.timestamp) }}</div>
+              <div class="message-footer-row">
+                <div class="message-time">{{ formatTime(message.timestamp) }}</div>
+                <button
+                  v-if="message.role === 'assistant' && !message.streaming && message.content"
+                  type="button"
+                  class="bubble-speak-btn"
+                  @click="speakAssistantMessage(message)"
+                >
+                  🔊 朗读
+                </button>
+              </div>
               <div v-if="message.streaming" class="typing-indicator">
                 <span></span><span></span><span></span>
               </div>
@@ -117,10 +136,10 @@
       <!-- 输入区域 -->
       <div v-if="pendingCompletion" class="completion-banner">
         <div class="completion-banner-copy">
-          <strong>实战任务已达标</strong>
+          <strong>热身实战任务已达标</strong>
           <p>
             已完成 {{ pendingCompletion.completedTasks }}/{{ pendingCompletion.totalTasks }} 个任务。
-            点击完成闯关后会保存第5关进度并解锁后续内容。
+            点击「完成闯关」保存进度，随即解锁 Arthur 前台 Boss 实战！
           </p>
         </div>
         <button class="complete-run-btn" @click="confirmCompletion">完成闯关</button>
@@ -132,10 +151,21 @@
             <button class="task-btn" @click="showTaskSidebar = !showTaskSidebar" title="学习任务">
               📋
             </button>
+            <button
+              type="button"
+              class="mic-btn"
+              :class="{ recording: isRecordingVoice, transcribing: isTranscribingVoice }"
+              :disabled="loading || pendingCompletion || isTranscribingVoice"
+              @click="toggleVoiceInput"
+              :title="isRecordingVoice ? '点击停止并识别语音' : '按英文口语语音输入'"
+            >
+              {{ isTranscribingVoice ? '⏳' : (isRecordingVoice ? '⏹️' : '🎙️') }}
+            </button>
             <input v-model="inputMessage" @keyup.enter="sendMessage"
-              :placeholder="pendingCompletion ? '任务已达标，请点击完成闯关保存进度' : (useEnglish ? 'Type your message in English...' : '请用英文输入你的消息...')" :disabled="loading || pendingCompletion"
+              :placeholder="isRecordingVoice ? '正在录音，说完请再点击 ⏹️ 按钮...' : (pendingCompletion ? '任务已达标，请点击完成闯关保存进度' : (useEnglish ? 'Type or speak in English (try I was wondering if...)' : '请用英文输入或语音说出你的消息...'))"
+              :disabled="loading || pendingCompletion || isRecordingVoice"
               class="message-input" />
-            <button class="send-btn" @click="sendMessage" :disabled="loading || pendingCompletion || !inputMessage.trim()">
+            <button class="send-btn" @click="sendMessage" :disabled="loading || pendingCompletion || isRecordingVoice || !inputMessage.trim()">
               <span v-if="loading" class="loading-spinner">⏳</span>
               <span v-else class="send-icon">📤</span>
             </button>
@@ -229,8 +259,9 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted, computed } from 'vue'
+import { ref, nextTick, onMounted, onBeforeUnmount, computed } from 'vue'
 import { toast } from '@/utils/toastService'
+import { playSpeechText, stopSpeechPlayback, transcribeAudioBlob } from '@/utils/speechPlayer'
 
 // Props
 const props = defineProps({
@@ -269,18 +300,23 @@ const pendingCompletion = ref(null)
 const showWordsSidebar = ref(false)
 const showTaskSidebar = ref(false)
 const practiceWords = ref([])
+const autoSpeakReply = ref(true)
+const isRecordingVoice = ref(false)
+const isTranscribingVoice = ref(false)
+let voiceMediaRecorder = null
+let voiceMediaStream = null
+let voiceAudioChunks = []
 
-// 添加缺失的useEnglish变量
 const useEnglish = ref(true) // 默认使用英文
 
 // 场景选项配置
 const sceneOptions = ref([
   {
     value: 'A',
-    name: '酒店入住',
+    name: '酒店日间礼宾预沟通',
     icon: '🏨',
-    description: '模拟酒店前台办理入住手续的完整流程',
-    tasks: ['确认预订信息', '检查身份证件', '介绍房间设施', '说明酒店政策', '完成入住登记']
+    description: '在友好零压力氛围中先把核心词汇与委婉问句说顺，为深夜 Boss 战热身',
+    tasks: ['核实预订与身份凭证', '询问大堂与前台接待', '委婉探讨升房与套房', '确认押金与预授权政策', '沟通安静房型与退房时间']
   },
   {
     value: 'B',
@@ -290,6 +326,85 @@ const sceneOptions = ref([
     tasks: ['欢迎客人', '介绍菜单', '记录点餐', '询问特殊需求', '服务和结账']
   }
 ])
+
+const toggleAutoSpeak = () => {
+  autoSpeakReply.value = !autoSpeakReply.value
+  if (!autoSpeakReply.value) {
+    stopSpeechPlayback()
+  }
+  toast.success(autoSpeakReply.value ? '🔊 已开启 AI 回复自动朗读' : '🔇 已关闭自动朗读')
+}
+
+const speakAssistantMessage = (msg) => {
+  if (!msg?.content) return
+  playSpeechText({ text: msg.content, key: `aichat_${msg.id}` })
+}
+
+const stopVoiceResources = () => {
+  if (voiceMediaRecorder && voiceMediaRecorder.state !== 'inactive') {
+    try {
+      voiceMediaRecorder.stop()
+    } catch {
+      // ignore
+    }
+  }
+  if (voiceMediaStream) {
+    voiceMediaStream.getTracks().forEach(t => t.stop())
+    voiceMediaStream = null
+  }
+  isRecordingVoice.value = false
+}
+
+const toggleVoiceInput = async () => {
+  if (isTranscribingVoice.value) return
+  if (isRecordingVoice.value && voiceMediaRecorder) {
+    voiceMediaRecorder.stop()
+    return
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    voiceMediaStream = stream
+    voiceAudioChunks = []
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : 'audio/webm'
+    voiceMediaRecorder = new MediaRecorder(stream, { mimeType })
+
+    voiceMediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) voiceAudioChunks.push(e.data)
+    }
+
+    voiceMediaRecorder.onstop = async () => {
+      const capturedMime = voiceMediaRecorder?.mimeType || 'audio/webm'
+      if (voiceMediaStream) {
+        voiceMediaStream.getTracks().forEach(t => t.stop())
+        voiceMediaStream = null
+      }
+      isRecordingVoice.value = false
+
+      if (voiceAudioChunks.length === 0) return
+      const blob = new Blob(voiceAudioChunks, { type: capturedMime })
+      voiceAudioChunks = []
+
+      isTranscribingVoice.value = true
+      try {
+        const transcript = await transcribeAudioBlob(blob, capturedMime)
+        inputMessage.value = inputMessage.value ? `${inputMessage.value} ${transcript}` : transcript
+        toast.success('🎙️ 语音已转为文字，可检查后按回车发送')
+      } catch (err) {
+        toast.error(err?.message || '语音识别失败，请再试一次')
+      } finally {
+        isTranscribingVoice.value = false
+      }
+    }
+
+    voiceMediaRecorder.start()
+    isRecordingVoice.value = true
+  } catch {
+    toast.error('无法打开麦克风，请在浏览器权限中允许录音或使用打字输入')
+  }
+}
 
 // 计算属性
 const isCurrentTask = computed(() => {
@@ -355,7 +470,7 @@ const loadChatHistory = async (sessionId) => {
       // 恢复会话信息
       sceneInfo.value = {
         scene: sessionInfo.scene,
-        aiRole: sessionInfo.chapter === 'A' ? '酒店前台接待员' : '餐厅服务员'
+        aiRole: sessionInfo.chapter === 'A' ? '友好日间礼宾顾问' : '餐厅服务员'
       }
       tasks.value = sessionInfo.tasks || []
       progress.value = sessionInfo.progress || { tasksCompleted: 0, totalTasks: 0, wordsUsed: 0, turnCount: 0 }
@@ -380,7 +495,7 @@ const loadChatHistory = async (sessionId) => {
 }
 
 // 开始任务对话
-const startTaskChat = async () => {
+const startTaskChat = async (forceNew = false) => {
   try {
     const response = await fetch('/api/aiApi/startTaskChat', {
       method: 'POST',
@@ -388,7 +503,8 @@ const startTaskChat = async () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        chapter: props.chapter // 明确传递章节参数
+        chapter: props.chapter,
+        forceNew
       })
     })
 
@@ -593,8 +709,9 @@ const sendMessage = async () => {
             const aiMessage = messages.value.find(msg => msg.id === aiMessageId)
             if (aiMessage) {
               aiMessage.streaming = false
-              // AI消息会在后端taskChat中自动保存，这里不需要重复保存
-              // await saveChatMessage('assistant', aiMessage.content)
+              if (autoSpeakReply.value && aiMessage.content) {
+                speakAssistantMessage(aiMessage)
+              }
             }
             break
           }
@@ -656,10 +773,10 @@ const formatTime = (timestamp) => {
   })
 }
 
-// 显示练习单词
+// 显示练习单词（按当前章节拉取对齐的场景词）
 const showPracticeWords = async () => {
   try {
-    const response = await fetch('/api/aiApi/practice_words')
+    const response = await fetch(`/api/aiApi/practice_words?chapter=${encodeURIComponent(props.chapter || 'A')}`)
     const data = await response.json()
     if (isApiSuccess(data)) {
       practiceWords.value = data.data?.words || []
@@ -670,8 +787,20 @@ const showPracticeWords = async () => {
   }
 }
 
+const restartWarmupChat = async () => {
+  stopSpeechPlayback()
+  stopVoiceResources()
+  messages.value = []
+  pendingCompletion.value = null
+  completionReport.value = null
+  await startTaskChat(true)
+  toast.success('已开启新一轮日间礼宾热身对话')
+}
+
 // 退出对话
 const exitChat = () => {
+  stopSpeechPlayback()
+  stopVoiceResources()
   if (pendingCompletion.value) {
     confirmCompletion()
     return
@@ -702,6 +831,11 @@ onMounted(() => {
   // 根据章节自动选择场景并开始对话
   selectedScene.value = props.chapter
   startTaskChat()
+})
+
+onBeforeUnmount(() => {
+  stopSpeechPlayback()
+  stopVoiceResources()
 })
 </script>
 
@@ -1947,5 +2081,54 @@ onMounted(() => {
   .task-status {
     align-self: flex-start;
   }
+}
+
+.audio-toggle-btn.active {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.message-footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.bubble-speak-btn {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mic-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  font-size: 1rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.mic-btn.recording {
+  background: #fee2e2;
+  border-color: #ef4444;
+  animation: pulse-mic 1s infinite;
+}
+
+@keyframes pulse-mic {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
 }
 </style>

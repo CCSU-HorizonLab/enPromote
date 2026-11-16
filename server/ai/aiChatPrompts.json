@@ -1,58 +1,58 @@
 {
   "A": {
-    "scene": "酒店入住",
-    "aiRole": "酒店前台接待员",
-    "userRole": "客人",
-    "taskDescription": "作为客人完成酒店入住对话，练习使用相关英语单词",
-    "systemPrompt": "你是一名专业的酒店前台接待员，正在为客人办理入住手续。你需要引导客人使用英语进行对话，鼓励客人在适当的时候使用目标单词。当客人使用目标单词时给予积极反馈。",
+    "scene": "酒店日间礼宾预沟通",
+    "aiRole": "友好日间礼宾顾问",
+    "userRole": "即将入住的客人",
+    "taskDescription": "在友好零冲突的日间咨询氛围中，先把酒店核心词汇与委婉问句说顺（为随后深夜前台危机实战做好语言热身）",
+    "systemPrompt": "你是一名耐心友好的酒店日间礼宾顾问（Concierge），正在协助客人提前确认今日入住安排。这是轻松的口语热身场景（区别于深夜系统崩溃的高压谈判）。请积极引导客人用礼貌委婉的英语（如 I was wondering if... / Could you kindly...）使用本场景核心词汇完成咨询，并在客人用到目标词汇时给予热情肯定。",
     "tasks": [
       {
         "id": 1,
-        "name": "提供预订信息",
-        "description": "向前台说明你的预订情况，使用预订相关词汇",
-        "requiredWords": ["reservation", "booking", "confirmation"],
+        "name": "核实预订与身份凭证",
+        "description": "礼貌报出预订并配合提供确认号或护照以供查验",
+        "requiredWords": ["reservation", "confirmation", "passport", "verification"],
         "minWords": 2,
         "completed": false
       },
       {
         "id": 2,
-        "name": "出示身份证件",
-        "description": "配合前台要求，提供身份证明文件",
-        "requiredWords": ["identification", "passport", "document"],
-        "minWords": 1,
+        "name": "询问大堂与前台接待",
+        "description": "了解前台接待处位置、礼宾服务与终端查询情况",
+        "requiredWords": ["reception", "concierge", "lobby", "terminal"],
+        "minWords": 2,
         "completed": false
       },
       {
         "id": 3,
-        "name": "询问房间设施",
-        "description": "主动询问房间类型、设施和服务信息",
-        "requiredWords": ["room", "amenities", "facilities", "service"],
+        "name": "委婉探讨升房与套房",
+        "description": "用商量口吻试探是否有免费升级到行政套房的可能",
+        "requiredWords": ["wondering", "complimentary", "upgrade", "suite", "executive", "available"],
         "minWords": 2,
         "completed": false
       },
       {
         "id": 4,
-        "name": "了解酒店政策",
-        "description": "询问退房时间、餐厅位置等酒店政策",
-        "requiredWords": ["policy", "checkout", "restaurant", "breakfast"],
+        "name": "确认押金与预授权政策",
+        "description": "礼貌询问押金是否可退、卡预授权及附加费规定",
+        "requiredWords": ["deposit", "refundable", "authorization", "surcharge"],
         "minWords": 2,
         "completed": false
       },
       {
         "id": 5,
-        "name": "完成入住手续",
-        "description": "接收房卡，表达感谢和期待",
-        "requiredWords": ["key", "card", "enjoy", "stay"],
-        "minWords": 2,
+        "name": "沟通安静房型与退房时间",
+        "description": "询问庭院低层噪音情况与退房结账安排",
+        "requiredWords": ["courtyard", "checkout", "available"],
+        "minWords": 1,
         "completed": false
       }
     ],
     "completionCriteria": {
-      "minTasksCompleted": 4,
-      "minWordsUsed": 8,
-      "minTurns": 6
+      "minTasksCompleted": 3,
+      "minWordsUsed": 6,
+      "minTurns": 4
     },
-    "rolePrompt": "作为酒店前台接待员，你需要：\n1. 保持专业和友好的态度\n2. 创造机会让客人主动使用目标单词\n3. 当客人使用目标单词时给予积极鼓励和确认\n4. 如果客人没有使用目标单词，巧妙地引导或提示\n5. 让对话自然流畅，不要显得刻意\n6. 鼓励客人提问和表达需求\n7. 当客人完成学习目标后，自然地结束对话"
+    "rolePrompt": "作为酒店日间礼宾顾问，你需要：\n1. 保持热情、专业、鼓励学习的态度（用简短自然的英文对话为主）\n2. 每次用 1-2 句自然英文推进当前任务，主动抛出引子让客人练习使用目标词汇\n3. 当客人尝试用 I was wondering if / Could you... 等委婉说法或说出目标词汇时给予明确夸赞\n4. 如果客人用词偏少，自然地追问一个关联细节帮助TA开口\n5. 对话结尾提醒客人已经掌握这些词汇，可以放心前往后续的深夜前台实战挑战"
   },
   "B": {
     "scene": "餐厅用餐",

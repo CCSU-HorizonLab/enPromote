@@ -425,11 +425,18 @@ router.get('/getReviewWords', async (req, res) => {
 
       console.log(`[getReviewWords] 最终获取的音标: "${phonetic_symbol}"`);
 
-      // 获取例句信息
+      // 获取例句信息（优先复用精选场景词库里的自然例句与语义角色）
+      const catalogMeta = word && word.word
+        ? findSceneWord(word.word, requestedChapter || null)
+        : null;
       let example = '';
       if (word && word.meanings && word.meanings.length > 0 &&
           word.meanings[0].definitions && word.meanings[0].definitions.length > 0) {
         example = word.meanings[0].definitions[0].example || '';
+      }
+
+      if (!isUsableExample(example) && catalogMeta?.example) {
+        example = catalogMeta.example;
       }
 
       if (!isUsableExample(example) && word) {
@@ -452,6 +459,9 @@ router.get('/getReviewWords', async (req, res) => {
         definition: meaning,
         phonetic_symbol: phonetic_symbol,
         example: example || MISSING_EXAMPLE_TEXT,
+        combatRole: catalogMeta?.combatRole || 'domain_chunk',
+        chapter: catalogMeta?.chapter || requestedChapter || '',
+        scenario: catalogMeta?.scenario || '',
         priority: item.priority,
         status: item.status,
         reviewCounts: item.reviewCounts,
@@ -878,16 +888,16 @@ router.post('/updateWordProgress', async (req, res) => {
   }
 });
 
-// 获取单词听力
+// 获取单词或例句发音（有道词典原音 API，零 LLM Token 消耗）
 router.get('/getWordAudio', async (req, res) => {
   const word = req.query.word;
-  if (!word) {
+  if (!word || !String(word).trim()) {
     return res.json({ code: 400, message: '请输入单词' });
   }
   try {
-    // 直接返回有道词典的音频URL
     const voiceType = 2; // 美式发音
-    const youDaoUrl = `http://dict.youdao.com/dictvoice?audio=${word}&type=${voiceType}`;
+    const encodedAudio = encodeURIComponent(String(word).trim());
+    const youDaoUrl = `http://dict.youdao.com/dictvoice?audio=${encodedAudio}&type=${voiceType}`;
     res.json({
       code: 200,
       data: youDaoUrl

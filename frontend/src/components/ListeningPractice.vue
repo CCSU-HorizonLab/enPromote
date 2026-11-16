@@ -3,7 +3,7 @@
     <!-- 进度条 -->
     <div class="listening-header">
       <div class="progress-info" v-if="words.length > 0">
-        <span class="progress-text">听力训练</span>
+        <span class="progress-text">听力阶梯训练</span>
         <div class="progress-bar">
           <div class="progress-fill" :style="{ width: progressPercentage + '%' }"></div>
         </div>
@@ -11,6 +11,23 @@
       </div>
       <div class="progress-info" v-else>
         <span class="progress-text">暂无练习单词</span>
+      </div>
+
+      <div v-if="words.length > 0 && !showComplete" class="listening-mode-bar">
+        <span class="step-mode-badge" :class="currentExerciseMode === 'sentence' ? 'badge-sentence' : 'badge-word'">
+          {{ currentExerciseMode === 'sentence' ? '🎧 场景整句抓词（盲听过渡）' : '🔤 单字发音热身' }}
+        </span>
+        <span v-if="currentRoleBadge" class="role-badge" :class="currentRoleBadge.cls">
+          {{ currentRoleBadge.label }}
+        </span>
+        <button
+          type="button"
+          class="mode-switch-pill"
+          @click="toggleTrainingStrategy"
+          title="切换混合阶梯模式或纯单字听写"
+        >
+          {{ trainingStrategy === 'ladder' ? '切换：纯单字听写' : '切换：整句阶梯模式（推荐）' }}
+        </button>
       </div>
     </div>
 
@@ -28,25 +45,45 @@
       <!-- 音频播放区域 -->
       <div class="audio-section">
         <div class="audio-controls">
-          <button class="play-btn" @click="playAudio" :disabled="!audioUrl || audioLoading"
-            :class="{ playing: isPlaying }">
+          <button
+            class="play-btn"
+            @click="playAudio"
+            :disabled="audioLoading"
+            :class="{ playing: isPlaying }"
+          >
             <span v-if="audioLoading">⏳</span>
             <span v-else-if="isPlaying">⏸️</span>
             <span v-else>🔊</span>
           </button>
           <div class="audio-info">
-            <p class="instruction" v-if="audioUrl">点击播放按钮或按空格键听单词发音</p>
-            <p class="instruction no-audio" v-else>该单词暂无音频，请直接根据提示拼写</p>
-            <p class="hint" v-if="showHint">提示: {{ currentWord.mean }}</p>
+            <p class="instruction" v-if="currentExerciseMode === 'sentence'">
+              请听完整英文场景句，从语流中抓取并拼出缺失的核心词（空格播放 / 回车提交）
+            </p>
+            <p class="instruction" v-else-if="audioUrl || currentWord.word">
+              点击播放按钮或按空格键听单词发音，拼出听到的单词
+            </p>
+            <p class="hint" v-if="showHint">中文释义: {{ currentWord.mean }}</p>
+            <p class="sentence-frame-box" v-if="currentExerciseMode === 'sentence' && showSentenceFrame">
+              句干框架：<strong>{{ maskedSentenceFrame }}</strong>
+            </p>
           </div>
         </div>
 
         <div class="audio-actions">
-          <button class="hint-btn" @click="toggleHint" :class="{ active: showHint }">
-            💡 {{ showHint ? '隐藏提示' : '显示提示' }}
+          <button class="replay-btn" @click="playAudio" type="button">
+            🔄 重播音频
           </button>
-          <button class="replay-btn" @click="playAudio" :disabled="!audioUrl">
-            🔄 重播
+          <button
+            v-if="currentExerciseMode === 'sentence'"
+            class="hint-btn"
+            @click="showSentenceFrame = !showSentenceFrame"
+            :class="{ active: showSentenceFrame }"
+            type="button"
+          >
+            👁️ {{ showSentenceFrame ? '隐藏句干' : '看挖空句干' }}
+          </button>
+          <button class="hint-btn" @click="toggleHint" :class="{ active: showHint }" type="button">
+            💡 {{ showHint ? '隐藏释义' : '显示释义' }}
           </button>
         </div>
       </div>
@@ -55,7 +92,7 @@
       <div class="input-section">
         <div class="letters-container">
           <div v-for="(letter, index) in wordLetters" :key="index" class="letter-slot" :class="{
-            'active': index === currentPosition,
+            'active': !isComplete && index === currentPosition,
             'filled': userInput[index] !== '',
             'correct': isComplete && userInput[index] === letter,
             'incorrect': isComplete && userInput[index] !== letter && userInput[index] !== ''
@@ -66,8 +103,17 @@
         </div>
 
         <div class="input-info">
-          <p class="input-hint">键盘操作：字母键输入 | 退格键删除 | 空格键播放 | Tab键显示提示</p>
+          <p class="input-hint">键盘操作：字母输入 | 退格修改 | 空格重听 | Enter 提交确认 | Tab 提示</p>
           <p class="input-progress">已输入: {{ filledCount }} / {{ wordLength }}</p>
+          <button
+            v-if="!isComplete"
+            type="button"
+            class="confirm-dictation-btn"
+            :disabled="filledCount === 0"
+            @click="checkAnswer"
+          >
+            ✅ 确认听写 (Enter)
+          </button>
         </div>
       </div>
 
@@ -78,16 +124,25 @@
             {{ isCorrect ? '✅' : '❌' }}
           </div>
           <div class="result-text">
-            <h3>{{ isCorrect ? '听写正确！' : '听写错误' }}</h3>
+            <h3>{{ isCorrect ? '听写正确！' : '听写有误' }}</h3>
             <p v-if="!isCorrect">
               正确答案：<strong>{{ currentWord.word }}</strong>
             </p>
+            <div v-if="usableExample" class="result-sentence-recap">
+              <span>完整场景句：</span>
+              <template v-for="(seg, idx) in exampleSegments" :key="idx">
+                <mark v-if="seg.isMatch" class="word-highlight">{{ seg.text }}</mark>
+                <span v-else>{{ seg.text }}</span>
+              </template>
+              <button type="button" class="mini-audio-btn" @click="playSentenceAudio()">🔊</button>
+            </div>
           </div>
         </div>
 
         <div class="result-actions">
           <button class="next-btn" @click="nextWord">
-            {{ currentIndex < words.length - 1 ? '下一个单词' : '完成练习' }} </button>
+            {{ currentIndex < words.length - 1 ? '下一个' : '完成练习' }} (Enter)
+          </button>
         </div>
       </div>
     </div>
@@ -96,7 +151,7 @@
     <div v-else-if="showComplete" class="completion-state">
       <div class="completion-content">
         <div class="completion-icon">🎉</div>
-        <h2>听力训练完成！</h2>
+        <h2>听力阶梯训练完成！</h2>
         <div class="completion-stats">
           <div class="stat-item">
             <span class="stat-number">{{ correctCount }}</span>
@@ -107,7 +162,7 @@
             <span class="stat-label">错误</span>
           </div>
           <div class="stat-item">
-            <span class="stat-number">{{ Math.round((correctCount / words.length) * 100) }}%</span>
+            <span class="stat-number">{{ words.length > 0 ? Math.round((correctCount / words.length) * 100) : 0 }}%</span>
             <span class="stat-label">准确率</span>
           </div>
         </div>
@@ -124,6 +179,8 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { getWordAudio, updateWordPriority } from '@/api/word'
+import { playSpeechText, stopSpeechPlayback } from '@/utils/speechPlayer'
+import { getCombatRoleMeta, splitSentenceByWord, buildMaskedSentence } from '@/utils/vocabMeta'
 
 // Props
 const props = defineProps({
@@ -142,6 +199,8 @@ const audioUrl = ref('')
 const audioLoading = ref(false)
 const isPlaying = ref(false)
 const showHint = ref(false)
+const showSentenceFrame = ref(false)
+const trainingStrategy = ref('ladder') // 'ladder' (单字热身+整句抓词) | 'word_only'
 const userInput = ref([])
 const currentPosition = ref(0)
 const isComplete = ref(false)
@@ -173,22 +232,60 @@ const filledCount = computed(() => {
   return userInput.value.filter(letter => letter !== '').length
 })
 
+const usableExample = computed(() => {
+  const raw = String(currentWord.value?.example || '').trim()
+  if (!raw || raw === '暂无例句') return ''
+  return raw
+})
+
+const exampleHasTargetWord = computed(() => {
+  if (!usableExample.value || !currentWord.value?.word) return false
+  const escaped = currentWord.value.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`\\b${escaped}\\b`, 'i').test(usableExample.value)
+})
+
+// 混合阶梯模式：前 3 词作为单字热身，后续含可用例句的词自动切换为“整句语流听辨填词”
+const currentExerciseMode = computed(() => {
+  if (trainingStrategy.value === 'word_only') return 'word'
+  if (currentIndex.value >= 3 && exampleHasTargetWord.value) {
+    return 'sentence'
+  }
+  return 'word'
+})
+
+const currentRoleBadge = computed(() => getCombatRoleMeta(currentWord.value?.combatRole))
+const maskedSentenceFrame = computed(() => buildMaskedSentence(usableExample.value, currentWord.value?.word || ''))
+const exampleSegments = computed(() => splitSentenceByWord(usableExample.value, currentWord.value?.word || ''))
+
 // 监听当前单词变化
 watch(currentWord, async (newWord) => {
   if (newWord) {
     await resetWordState()
-    await loadAudio()
+    if (currentExerciseMode.value === 'word') {
+      await loadAudio()
+    }
   }
 })
 
 // 方法
 const resetWordState = async () => {
+  stopSpeechPlayback()
   userInput.value = new Array(wordLetters.value.length).fill('')
   currentPosition.value = 0
   isComplete.value = false
   isCorrect.value = false
   showHint.value = false
+  showSentenceFrame.value = false
+  isPlaying.value = false
   audioUrl.value = ''
+}
+
+const toggleTrainingStrategy = () => {
+  stopSpeechPlayback()
+  trainingStrategy.value = trainingStrategy.value === 'ladder' ? 'word_only' : 'ladder'
+  if (currentExerciseMode.value === 'word' && !audioUrl.value) {
+    loadAudio()
+  }
 }
 
 const loadAudio = async () => {
@@ -197,7 +294,7 @@ const loadAudio = async () => {
   try {
     audioLoading.value = true
     const response = await getWordAudio({ word: currentWord.value.word })
-    if (response.data.code === 200 && response.data.data) {
+    if (response?.data?.code === 200 && response?.data?.data) {
       audioUrl.value = response.data.data
     }
   } catch (error) {
@@ -207,24 +304,61 @@ const loadAudio = async () => {
   }
 }
 
+const playSentenceAudio = async () => {
+  const sentence = usableExample.value || currentWord.value?.word
+  if (!sentence) return
+  await playSpeechText({
+    text: sentence,
+    key: `listen_sentence_${currentIndex.value}`,
+    onStart: () => {
+      isPlaying.value = true
+    },
+    onEnd: () => {
+      isPlaying.value = false
+    },
+    onError: () => {
+      isPlaying.value = false
+    }
+  })
+}
+
 const playAudio = () => {
-  if (!audioUrl.value || audioLoading.value) return
-
-  const audio = new Audio(audioUrl.value)
-  isPlaying.value = true
-
-  audio.onended = () => {
-    isPlaying.value = false
+  if (audioLoading.value) return
+  if (currentExerciseMode.value === 'sentence') {
+    playSentenceAudio()
+    return
   }
 
-  audio.onerror = () => {
-    isPlaying.value = false
-    console.error('音频播放失败')
+  if (audioUrl.value) {
+    stopSpeechPlayback()
+    const audio = new Audio(audioUrl.value)
+    isPlaying.value = true
+    audio.onended = () => {
+      isPlaying.value = false
+    }
+    audio.onerror = () => {
+      isPlaying.value = false
+      playSpeechText({ text: currentWord.value?.word || '', key: `listen_word_${currentIndex.value}` })
+    }
+    audio.play().catch(() => {
+      isPlaying.value = false
+      playSpeechText({ text: currentWord.value?.word || '', key: `listen_word_${currentIndex.value}` })
+    })
+    return
   }
 
-  audio.play().catch(error => {
-    isPlaying.value = false
-    console.error('音频播放失败:', error)
+  playSpeechText({
+    text: currentWord.value?.word || '',
+    key: `listen_word_${currentIndex.value}`,
+    onStart: () => {
+      isPlaying.value = true
+    },
+    onEnd: () => {
+      isPlaying.value = false
+    },
+    onError: () => {
+      isPlaying.value = false
+    }
   })
 }
 
@@ -233,9 +367,14 @@ const toggleHint = () => {
 }
 
 const handleKeyPress = (event) => {
-  if (isComplete.value) return
-
   const key = event.key.toLowerCase()
+
+  if (isComplete.value) {
+    if (key === 'enter') {
+      nextWord()
+    }
+    return
+  }
 
   if (key === ' ') {
     event.preventDefault()
@@ -244,24 +383,26 @@ const handleKeyPress = (event) => {
     event.preventDefault()
     toggleHint()
   } else if (key === 'enter') {
-    checkAnswer()
+    if (filledCount.value > 0) {
+      checkAnswer()
+    }
   } else if (key === 'backspace') {
-    if (currentPosition.value > 0) {
+    if (currentPosition.value < wordLetters.value.length && userInput.value[currentPosition.value] !== '') {
+      userInput.value[currentPosition.value] = ''
+    } else if (currentPosition.value > 0) {
       currentPosition.value--
       userInput.value[currentPosition.value] = ''
     }
-  } else if (key.match(/[a-z]/) && currentPosition.value < wordLetters.value.length) {
+  } else if (/^[a-z]$/.test(key) && currentPosition.value < wordLetters.value.length) {
     userInput.value[currentPosition.value] = key
     if (currentPosition.value < wordLetters.value.length - 1) {
       currentPosition.value++
-    } else {
-      // 自动检查答案
-      setTimeout(checkAnswer, 100)
     }
   }
 }
 
 const checkAnswer = () => {
+  if (isComplete.value || !currentWord.value) return
   const userWord = userInput.value.join('').toLowerCase()
   const correctWord = currentWord.value.word.toLowerCase()
 
@@ -285,6 +426,7 @@ const checkAnswer = () => {
 }
 
 const nextWord = () => {
+  stopSpeechPlayback()
   if (currentIndex.value < props.words.length - 1) {
     currentIndex.value++
   } else {
@@ -293,16 +435,17 @@ const nextWord = () => {
 }
 
 const handleComplete = () => {
+  stopSpeechPlayback()
   emit('complete', {
     total: props.words.length,
     correct: correctCount.value,
-    accuracy: Math.round((correctCount.value / props.words.length) * 100)
+    accuracy: props.words.length > 0 ? Math.round((correctCount.value / props.words.length) * 100) : 0
   })
 }
 
 // 生命周期
 onMounted(() => {
-  if (currentWord.value) {
+  if (currentWord.value && currentExerciseMode.value === 'word') {
     loadAudio()
   }
   window.addEventListener('keydown', handleKeyPress)
@@ -310,6 +453,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyPress)
+  stopSpeechPlayback()
 })
 </script>
 
@@ -711,5 +855,119 @@ onUnmounted(() => {
   .completion-stats {
     gap: 1rem;
   }
+}
+
+.listening-mode-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.step-mode-badge,
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.step-mode-badge.badge-sentence {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.step-mode-badge.badge-word {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.role-badge {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.role-badge.role-evidence {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.role-badge.role-stance {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.role-badge.role-twist {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.mode-switch-pill {
+  margin-left: auto;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sentence-frame-box {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-left: 3px solid #667eea;
+  border-radius: 6px;
+  color: #1e293b;
+  font-size: 0.95rem;
+}
+
+.confirm-dictation-btn {
+  margin-top: 10px;
+  padding: 8px 20px;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  color: #ffffff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.confirm-dictation-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.result-sentence-recap {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 8px;
+  color: #1e293b;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.word-highlight {
+  background: #fef08a;
+  color: #1e293b;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.mini-audio-btn {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  border-radius: 999px;
+  padding: 2px 8px;
+  cursor: pointer;
+  margin-left: 4px;
 }
 </style>

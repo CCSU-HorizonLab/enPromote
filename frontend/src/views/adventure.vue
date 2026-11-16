@@ -276,8 +276,8 @@
         <button class="back-btn" @click="backToMap">返回训练台</button>
         <div class="level-shell-copy">
           <span class="eyebrow">{{ currentChapterMeta.name }}</span>
-          <h2>05 实战对话</h2>
-          <p>把词汇、听力和表达放进真实情境里使用。</p>
+          <h2>05 日间礼宾热身</h2>
+          <p>先在友好零压力的酒店预沟通中开口用出新学词汇，随后前往 Arthur 深夜 Boss 战。</p>
         </div>
         <div class="mini-progress">{{ completedLevels }}/5</div>
       </div>
@@ -357,37 +357,37 @@ const levelSteps = [
   {
     key: 'wordP',
     order: '01',
-    title: '词汇学习',
-    goal: '认识本场景核心词汇，建立第一层语义记忆。',
-    estimate: '约 6 分钟'
+    title: '词汇与语境',
+    goal: '结合真实场景例句与角色标签认识核心词，分 10 词微组掌握并标注熟悉度。',
+    estimate: '约 4 分钟'
   },
   {
     key: 'spellP',
     order: '02',
-    title: '拼写练习',
-    goal: '用拼写把词义和词形绑定起来，减少看得懂但写不出的情况。',
-    estimate: '约 7 分钟'
+    title: '靶向拼写',
+    goal: '已认识词做词干轻填减负，模糊与变故关键术语重点全拼并当场纠偏。',
+    estimate: '约 4 分钟'
   },
   {
     key: 'listenP',
     order: '03',
-    title: '听力训练',
-    goal: '通过发音识别词汇，为真实对话做准备。',
-    estimate: '约 6 分钟'
+    title: '听力阶梯',
+    goal: '单字热身过渡到整句自然语流听音抓词，平稳衔接二周目电话盲听。',
+    estimate: '约 5 分钟'
   },
   {
     key: 'customsP',
     order: '04',
-    title: 'AI 题目',
-    goal: '用个性化题目检查掌握情况，定位还不稳定的表达。',
-    estimate: '约 8 分钟'
+    title: 'AI 语用演练',
+    goal: '覆盖礼貌委婉 vs 生硬表达辨析与对话盲听试炼，检验真实语境理解。',
+    estimate: '约 5 分钟'
   },
   {
     key: 'coverP',
     order: '05',
-    title: '实战对话',
-    goal: '在完整场景里开口表达，把训练内容真正用出来。',
-    estimate: '约 10 分钟'
+    title: '日间礼宾热身',
+    goal: '在零压力友好酒店预沟通中开口或打字用出新学词汇，随后进入深夜 Boss 战。',
+    estimate: '约 6 分钟'
   }
 ]
 
@@ -706,6 +706,32 @@ const resetVocabularyPractice = () => {
   showLevelComplete.value = false
 }
 
+const getAssessmentsStorageKey = (chapter = currentChapterId.value) => {
+  const userId = userInfo.value?._id || 'guest'
+  return `vocabAssessments:${userId}:${String(chapter || 'A').toUpperCase()}`
+}
+
+const loadSavedAssessments = (chapter = currentChapterId.value) => {
+  try {
+    const raw = localStorage.getItem(getAssessmentsStorageKey(chapter))
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
+const saveVocabAssessments = (updates = {}, chapter = currentChapterId.value) => {
+  try {
+    const existing = loadSavedAssessments(chapter)
+    localStorage.setItem(
+      getAssessmentsStorageKey(chapter),
+      JSON.stringify({ ...existing, ...updates })
+    )
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
 const startSpellingPractice = async () => {
   try {
     // 使用当前章节获取单词列表
@@ -716,7 +742,36 @@ const startSpellingPractice = async () => {
     const data = await response.json()
 
     if (isApiSuccess(data)) {
-      spellingWords.value = data.data?.words || []
+      const rawWords = data.data?.words || []
+      const assessments = loadSavedAssessments(activeChapter)
+
+      const annotated = rawWords.map((item) => {
+        const status = assessments[item.word] || ''
+        const isMustFull = status === 'unknown' || status === 'vague' || item.combatRole === 'twist_defense'
+        const isKnown = status === 'know' && !isMustFull
+        return {
+          ...item,
+          vocabStatus: status,
+          spellingMode: isKnown ? 'clue' : 'full'
+        }
+      })
+
+      // 靶向减负分流：优先保留模糊/不认识词与高价值变故/招式词，单轮收敛至最多 12 个核心拼写项
+      let targetWords = annotated
+      if (annotated.length > 12) {
+        const weakOrTwist = annotated.filter(
+          w => w.vocabStatus === 'unknown' || w.vocabStatus === 'vague' || w.combatRole === 'twist_defense'
+        )
+        const stanceOrEvidence = annotated.filter(
+          w => !weakOrTwist.includes(w) && (w.combatRole === 'stance' || w.combatRole === 'evidence')
+        )
+        const rest = annotated.filter(
+          w => !weakOrTwist.includes(w) && !stanceOrEvidence.includes(w)
+        )
+        targetWords = [...weakOrTwist, ...stanceOrEvidence, ...rest].slice(0, Math.max(12, weakOrTwist.length))
+      }
+
+      spellingWords.value = targetWords
       showSpellingComplete.value = false
       correctSpellings.value = 0
       incorrectSpellings.value = 0
@@ -736,16 +791,19 @@ const toggleMeaning = () => {
   showMeaning.value = !showMeaning.value
 }
 
-const handleKnow = (index) => {
+const handleKnow = (index, meta) => {
   knownWords.value++
+  if (meta?.word) saveVocabAssessments({ [meta.word]: 'know' })
 }
 
-const handleVague = (index) => {
+const handleVague = (index, meta) => {
   vagueWords.value++
+  if (meta?.word) saveVocabAssessments({ [meta.word]: 'vague' })
 }
 
-const handleUnknown = (index) => {
+const handleUnknown = (index, meta) => {
   unknownWords.value++
+  if (meta?.word) saveVocabAssessments({ [meta.word]: 'unknown' })
 }
 
 const handleNext = (index) => {
@@ -755,11 +813,14 @@ const handleNext = (index) => {
 const handleVocabularyComplete = async (stats) => {
   console.log('词汇练习完成:', stats)
 
-  // 如果有统计数据，更新计数
+  // 如果有统计数据，更新计数并保存第 1 关熟悉度评估给第 2、3 关使用
   if (stats) {
-    knownWords.value = stats.knownWords || knownWords.value
-    vagueWords.value = stats.vagueWords || vagueWords.value
-    unknownWords.value = stats.unknownWords || unknownWords.value
+    knownWords.value = stats.knownWords ?? knownWords.value
+    vagueWords.value = stats.vagueWords ?? vagueWords.value
+    unknownWords.value = stats.unknownWords ?? unknownWords.value
+    if (stats.assessments) {
+      saveVocabAssessments(stats.assessments, stats.chapter || currentChapterId.value)
+    }
   }
 
   // 记录学习活动到StudyRecord，使用实际的学习时长
@@ -856,20 +917,24 @@ const handleVocabularyComplete = async (stats) => {
   await showFirstLevelCompleteAndPreload()
 }
 
-// 第一关完成后的预加载流程
+// 第一关完成后的静默预加载流程（不再强弹窗阻塞学习心流）
 const showFirstLevelCompleteAndPreload = async () => {
-  // 显示第一关完成的提示
   toast.success(`🎉 第一关完成！认识：${knownWords.value}个，模糊：${vagueWords.value}个，不认识：${unknownWords.value}个`)
 
-  // 开始预加载AI题目
-  await startAIQuestionPreload()
-  // 完成第一关
+  // 先标记第 1 关完成，立即展示下一关入口
   await completeLevel('wordP')
+
+  // 第 4 关 AI 题目改为后台静默预加载，不阻塞进入第 2 关
+  startAIQuestionPreload({ silent: true }).catch((err) => {
+    console.warn('后台静默预加载AI题目异常:', err)
+  })
 }
 
 // 预加载AI题目
-const startAIQuestionPreload = async () => {
-  showAILoadingModal.value = true
+const startAIQuestionPreload = async ({ silent = false } = {}) => {
+  if (!silent) {
+    showAILoadingModal.value = true
+  }
 
   try {
     // 使用当前章节而不是cet4.position
@@ -879,10 +944,8 @@ const startAIQuestionPreload = async () => {
     // 获取复习单词列表
     const wordList = []
 
-    // 确保有单词列表，否则使用默认单词
     if (wordList.length === 0) {
       console.warn('没有复习单词，使用默认单词列表')
-      // 可以添加一些默认单词或者从其他接口获取
     }
 
     console.log('预加载AI题目 - Chapter:', currentChapter, 'wordList length:', wordList.length)
@@ -917,27 +980,25 @@ const startAIQuestionPreload = async () => {
       }))
 
       console.log('✅ AI题目预加载成功:', data.data)
-      console.log('✅ 预加载状态更新:', {
-        isAIQuestionsPreloaded: isAIQuestionsPreloaded.value,
-        hasQuestions: !!preloadedAIQuestions.value,
-        questionsCount: data.data?.fill_in_the_blanks?.length || 0
-      })
 
-      // 模拟加载时间，让用户看到加载过程
-      setTimeout(() => {
-        completeAIQuestionPreload()
-      }, 4000) // 4秒后完成
-
+      if (!silent) {
+        setTimeout(() => {
+          completeAIQuestionPreload()
+        }, 4000)
+      }
     } else {
       console.error('AI题目生成失败:', data)
-      showAILoadingModal.value = false
-      toast.error(`AI题目生成失败: ${data.message || '未知错误'}`)
+      if (!silent) {
+        showAILoadingModal.value = false
+        toast.error(`AI题目生成失败: ${data.message || '未知错误'}`)
+      }
     }
-
   } catch (error) {
     console.error('预加载AI题目失败:', error)
-    showAILoadingModal.value = false
-    toast.error('网络错误，请检查连接后重试')
+    if (!silent) {
+      showAILoadingModal.value = false
+      toast.error('网络错误，请检查连接后重试')
+    }
   }
 }
 
@@ -1017,16 +1078,18 @@ const handleSpellingIncorrect = (index) => {
 }
 
 const HOTEL_LISTENING_FALLBACK = [
-  { word: "reservation", mean: "n. 预订；预约" },
-  { word: "confirmation", mean: "n. 确认号；确认书" },
-  { word: "passport", mean: "n. 护照" },
-  { word: "complimentary", mean: "adj. 免费赠送的；礼遇的" },
-  { word: "upgrade", mean: "v./n. 升级（房型或服务）" },
-  { word: "reception", mean: "n. 前台接待处" },
-  { word: "concierge", mean: "n. 礼宾员；礼宾部" },
-  { word: "deposit", mean: "n. 押金；保证金" },
-  { word: "suite", mean: "n. 套房" },
-  { word: "checkout", mean: "n. 退房结账" }
+  { word: "reservation", mean: "n. 预订；预约", combatRole: "domain_chunk", example: "I have a reservation under the name of Alex for tonight." },
+  { word: "confirmation", mean: "n. 确认号；确认书", combatRole: "evidence", example: "Here is my booking confirmation number for your verification." },
+  { word: "passport", mean: "n. 护照", combatRole: "evidence", example: "Please present your passport at the reception desk." },
+  { word: "verification", mean: "n. 核实；查验", combatRole: "stance", example: "Here are my passport and voucher for your verification." },
+  { word: "terminal", mean: "n. 电脑终端；系统终端", combatRole: "domain_chunk", example: "Could you kindly check the backup terminal for delayed records?" },
+  { word: "complimentary", mean: "adj. 免费赠送的；礼遇的", combatRole: "domain_chunk", example: "Given the inconvenience, a complimentary upgrade was offered." },
+  { word: "upgrade", mean: "v./n. 升级（房型或服务）", combatRole: "domain_chunk", example: "I was wondering if a room upgrade might be possible tonight." },
+  { word: "deposit", mean: "n. 押金；保证金", combatRole: "evidence", example: "Could you confirm whether the security deposit is refundable?" },
+  { word: "refundable", mean: "adj. 可退还的", combatRole: "domain_chunk", example: "The room deposit is fully refundable upon check-out." },
+  { word: "courtyard", mean: "n. 庭院（常指内庭低层客房）", combatRole: "twist_defense", example: "I would prefer a quieter high room instead of the courtyard." },
+  { word: "surcharge", mean: "n. 附加费；额外加收费用", combatRole: "twist_defense", example: "Could we politely ask you to waive the late arrival surcharge?" },
+  { word: "wondering", mean: "v. 想知道（用于委婉商量请求）", combatRole: "stance", example: "I was wondering if it might be possible to confirm my booking." }
 ]
 
 const startListeningPractice = async () => {
@@ -1051,16 +1114,35 @@ const startListeningPractice = async () => {
     // 获取需要听力练习的单词（按当前章节筛选场景词）
     const { data } = await getReviewWords({ chapter: activeChapter })
 
-    if (data.code === 200) {
-      // 限制听力练习单词数量，最多20个
-      const words = data.data.words || []
-      listeningWords.value = words.slice(0, 20)
+    if (isApiSuccess(data)) {
+      const rawWords = data.data?.words || []
+      const assessments = loadSavedAssessments(activeChapter)
+
+      // 阶梯排序：优先纳入薄弱词 + 变故防身词 + 委婉招式词，单轮精选 12 题避免听写疲劳
+      const sorted = [...rawWords].sort((a, b) => {
+        const rank = (item) => {
+          const st = assessments[item.word] || item.status
+          if (st === 'unknown') return 4
+          if (st === 'vague') return 3
+          if (item.combatRole === 'twist_defense' || item.combatRole === 'stance') return 2
+          return 1
+        }
+        return rank(b) - rank(a)
+      })
+
+      listeningWords.value = sorted.slice(0, 12)
       
       // 如果API返回的单词为空，使用当前场景兜底词库
       if (listeningWords.value.length === 0) {
         listeningWords.value = getFallbackWords()
       }
       
+      showListeningComplete.value = false
+      listeningStats.value = { total: 0, correct: 0, accuracy: 0 }
+      listeningStartTime.value = new Date()
+      currentView.value = 'level-listenP'
+    } else {
+      listeningWords.value = getFallbackWords()
       showListeningComplete.value = false
       listeningStats.value = { total: 0, correct: 0, accuracy: 0 }
       listeningStartTime.value = new Date()

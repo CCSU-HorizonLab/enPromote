@@ -119,6 +119,8 @@ function getOrCreateSession(sessionId = 'default', requestedRunMode = null) {
       twistAddressed: runMode !== 'ng_plus',
       subtitleRevealedCount: 0,
       revealedIndices: [],
+      cluePeekCount: 0,
+      peekedClueKeys: [],
       usedCardsMode: false,
       round: 0,
       status: 'active', // 'active' | 'completed'
@@ -142,6 +144,8 @@ function getOrCreateSession(sessionId = 'default', requestedRunMode = null) {
       existing.twistAddressed = requestedRunMode !== 'ng_plus';
       existing.subtitleRevealedCount = 0;
       existing.revealedIndices = [];
+      existing.cluePeekCount = 0;
+      existing.peekedClueKeys = [];
     }
   }
   return sessions.get(sessionId);
@@ -174,10 +178,80 @@ function computeLiveRapportScore(session) {
   const avgTone = session.toneScores.length > 0
     ? session.toneScores.reduce((a, b) => a + b, 0) / session.toneScores.length
     : 15; // 默认初始15分
-  const raw = factScore + chunkScore + Math.round(avgTone) - session.penaltyPoints;
+  const clueDeduction = session.runMode === 'ng_plus'
+    ? (session.cluePeekCount >= 2 ? 10 : (session.cluePeekCount === 1 ? 5 : 0))
+    : 0;
+  const raw = factScore + chunkScore + Math.round(avgTone) - session.penaltyPoints - clueDeduction;
   const score = Math.max(10, Math.min(100, raw));
   // 若启用了全句小抄，实时得分上限压制在 75 (2星标准及格)
   return session.usedFullScaffold ? Math.min(75, score) : score;
+}
+
+/**
+ * 统一计算结算账本、生成 NPC 结案评语并持久化回模块 A 章节
+ */
+async function buildAndFinalizeSettlement(session, { scenario, npc, finalStatement, userId, chapterId }) {
+  const avgTone = session.toneScores.length > 0
+    ? session.toneScores.reduce((a, b) => a + b, 0) / session.toneScores.length
+    : 15;
+
+  const settlementMath = evaluateRapportSettlement({
+    factsVerified: session.factsVerified,
+    allWeaponsHit: session.allWeaponsHit,
+    avgToneScore: avgTone,
+    penaltyPoints: session.penaltyPoints,
+    usedFullScaffold: session.usedFullScaffold,
+    usedCardsMode: session.usedCardsMode,
+    runMode: session.runMode,
+    subtitleRevealedCount: session.subtitleRevealedCount,
+    cluePeekCount: session.cluePeekCount || 0,
+    twistAddressed: session.twistAddressed,
+    scenario
+  });
+
+  const receiptData = await generateSettlementReceipt({
+    scenario,
+    npc,
+    history: session.history,
+    finalStatement,
+    settlement: settlementMath
+  });
+
+  const settlement = {
+    finalScore: settlementMath.finalScore,
+    stars: settlementMath.stars,
+    outcome: settlementMath.outcome,
+    runMode: settlementMath.runMode,
+    prestigeTier: settlementMath.prestigeTier,
+    prestigeLabel: settlementMath.prestigeLabel,
+    prestigeReason: settlementMath.prestigeReason,
+    privilegeUnlocked: settlementMath.privilegeUnlocked,
+    twistAddressed: settlementMath.twistAddressed,
+    subtitleRevealedCount: settlementMath.subtitleRevealedCount,
+    cluePeekCount: settlementMath.cluePeekCount,
+    usedCardsMode: settlementMath.usedCardsMode,
+    title: settlementMath.title,
+    storyText: settlementMath.storyText,
+    scaffoldCapTriggered: settlementMath.scaffoldCapTriggered,
+    usedFullScaffold: session.usedFullScaffold,
+    scoreBreakdown: settlementMath.scoreBreakdown,
+    npcFinalReply: receiptData.npcFinalReply,
+    npcFinalEmotion: receiptData.npcFinalEmotion,
+    oneKeyTakeaway: receiptData.oneKeyTakeaway
+  };
+
+  session.status = 'completed';
+  session.settlement = settlement;
+
+  if (userId) {
+    settlement.persistedChapter = await persistAvgSettlementToChapter({
+      userId,
+      chapterId,
+      settlement
+    });
+  }
+
+  return settlement;
 }
 
 /**
@@ -213,12 +287,15 @@ router.get('/init', (req, res) => {
           ? {
               twistId: session.activeTwist.twistId,
               title: session.activeTwist.title,
-              phoneContextHint: session.activeTwist.phoneContextHint
+              phoneContextHint: session.activeTwist.phoneContextHint,
+              twistKeywords: session.activeTwist.twistKeywords || []
             }
           : null,
         twistAddressed: session.twistAddressed,
         subtitleRevealedCount: session.subtitleRevealedCount,
         revealedIndices: session.revealedIndices,
+        cluePeekCount: session.cluePeekCount || 0,
+        peekedClueKeys: session.peekedClueKeys || [],
         usedCardsMode: session.usedCardsMode,
         npc: {
           npcId: npc.npcId,
@@ -382,65 +459,13 @@ router.post('/chat', async (req, res) => {
     // 当完成第 3 回合对白时，自动触发结案落锁，打印消费结案小票
     if (session.round >= 3) {
       isAutoCompleted = true;
-      const statement = userMessage;
-      const avgTone = session.toneScores.length > 0
-        ? session.toneScores.reduce((a, b) => a + b, 0) / session.toneScores.length
-        : 15;
-
-      const settlementMath = evaluateRapportSettlement({
-        factsVerified: session.factsVerified,
-        allWeaponsHit: session.allWeaponsHit,
-        avgToneScore: avgTone,
-        penaltyPoints: session.penaltyPoints,
-        usedFullScaffold: session.usedFullScaffold,
-        usedCardsMode: session.usedCardsMode,
-        runMode: session.runMode,
-        subtitleRevealedCount: session.subtitleRevealedCount,
-        twistAddressed: session.twistAddressed,
-        scenario
-      });
-
-      const receiptData = await generateSettlementReceipt({
+      autoSettlement = await buildAndFinalizeSettlement(session, {
         scenario,
         npc,
-        history: session.history,
-        finalStatement: statement,
-        settlement: settlementMath
+        finalStatement: userMessage,
+        userId: req.session?.userid,
+        chapterId: chapter
       });
-
-      autoSettlement = {
-        finalScore: settlementMath.finalScore,
-        stars: settlementMath.stars,
-        outcome: settlementMath.outcome,
-        runMode: settlementMath.runMode,
-        prestigeTier: settlementMath.prestigeTier,
-        prestigeLabel: settlementMath.prestigeLabel,
-        prestigeReason: settlementMath.prestigeReason,
-        privilegeUnlocked: settlementMath.privilegeUnlocked,
-        twistAddressed: settlementMath.twistAddressed,
-        subtitleRevealedCount: settlementMath.subtitleRevealedCount,
-        usedCardsMode: settlementMath.usedCardsMode,
-        title: settlementMath.title,
-        storyText: settlementMath.storyText,
-        scaffoldCapTriggered: settlementMath.scaffoldCapTriggered,
-        usedFullScaffold: session.usedFullScaffold,
-        scoreBreakdown: settlementMath.scoreBreakdown,
-        npcFinalReply: receiptData.npcFinalReply,
-        npcFinalEmotion: receiptData.npcFinalEmotion,
-        oneKeyTakeaway: receiptData.oneKeyTakeaway
-      };
-
-      session.status = 'completed';
-      session.settlement = autoSettlement;
-
-      if (req.session?.userid) {
-        const persisted = await persistAvgSettlementToChapter({
-          userId: req.session.userid,
-          chapterId: chapter,
-          settlement: autoSettlement
-        });
-        autoSettlement.persistedChapter = persisted;
-      }
     }
 
     // 3. TTS 语音生成（受前端 ttsEnabled 开关控制）
@@ -481,6 +506,7 @@ router.post('/chat', async (req, res) => {
         runMode: session.runMode,
         twistAddressed: session.twistAddressed,
         subtitleRevealedCount: session.subtitleRevealedCount,
+        cluePeekCount: session.cluePeekCount || 0,
         usedCardsMode: session.usedCardsMode,
         currentRound: session.round,
         pacing: updatedPacing,
@@ -585,66 +611,13 @@ router.post('/resolve-check', async (req, res) => {
 
     const statement = finalStatement || (session.history.length > 0 ? session.history[session.history.length - 1].content : "Thank you for looking into my reservation.");
 
-    // 1. 确定性天平纯算
-    const avgTone = session.toneScores.length > 0
-      ? session.toneScores.reduce((a, b) => a + b, 0) / session.toneScores.length
-      : 15;
-
-    const settlementMath = evaluateRapportSettlement({
-      factsVerified: session.factsVerified,
-      allWeaponsHit: session.allWeaponsHit,
-      avgToneScore: avgTone,
-      penaltyPoints: session.penaltyPoints,
-      usedFullScaffold: session.usedFullScaffold,
-      usedCardsMode: session.usedCardsMode,
-      runMode: session.runMode,
-      subtitleRevealedCount: session.subtitleRevealedCount,
-      twistAddressed: session.twistAddressed,
-      scenario
-    });
-
-    // 2. 生成结案小票 NPC 台词与单句破局金句
-    const receiptData = await generateSettlementReceipt({
+    const fullSettlement = await buildAndFinalizeSettlement(session, {
       scenario,
       npc,
-      history: session.history,
       finalStatement: statement,
-      settlement: settlementMath
+      userId: req.session?.userid,
+      chapterId: chapter
     });
-
-    const fullSettlement = {
-      finalScore: settlementMath.finalScore,
-      stars: settlementMath.stars,
-      outcome: settlementMath.outcome,
-      runMode: settlementMath.runMode,
-      prestigeTier: settlementMath.prestigeTier,
-      prestigeLabel: settlementMath.prestigeLabel,
-      prestigeReason: settlementMath.prestigeReason,
-      privilegeUnlocked: settlementMath.privilegeUnlocked,
-      twistAddressed: settlementMath.twistAddressed,
-      subtitleRevealedCount: settlementMath.subtitleRevealedCount,
-      usedCardsMode: settlementMath.usedCardsMode,
-      title: settlementMath.title,
-      storyText: settlementMath.storyText,
-      scaffoldCapTriggered: settlementMath.scaffoldCapTriggered,
-      usedFullScaffold: session.usedFullScaffold,
-      scoreBreakdown: settlementMath.scoreBreakdown,
-      npcFinalReply: receiptData.npcFinalReply,
-      npcFinalEmotion: receiptData.npcFinalEmotion,
-      oneKeyTakeaway: receiptData.oneKeyTakeaway
-    };
-
-    // 3. 落锁封板并持久化至登录账号模块 A 章节进度
-    session.status = 'completed';
-    session.settlement = fullSettlement;
-
-    if (req.session?.userid) {
-      fullSettlement.persistedChapter = await persistAvgSettlementToChapter({
-        userId: req.session.userid,
-        chapterId: chapter,
-        settlement: fullSettlement
-      });
-    }
 
     res.json({
       success: true,
@@ -747,6 +720,36 @@ router.post('/reveal-subtitle', (req, res) => {
       data: {
         subtitleRevealedCount: session.subtitleRevealedCount,
         revealedIndices: session.revealedIndices
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /api/avg-test/peek-clue
+ * 二周目盲听微梯缓冲：仅查看要点线索（1次内扣5分但保留黑金资格；>=2次放弃纯度）
+ */
+router.post('/peek-clue', (req, res) => {
+  try {
+    const { sessionId: rawSessionId = 'default', bubbleKey = 'opening' } = req.body || {};
+    const sessionId = resolveSessionId(req, rawSessionId);
+    const session = getOrCreateSession(sessionId);
+    if (!Array.isArray(session.peekedClueKeys)) {
+      session.peekedClueKeys = [];
+    }
+    if (!session.peekedClueKeys.includes(bubbleKey)) {
+      session.peekedClueKeys.push(bubbleKey);
+      session.cluePeekCount = (session.cluePeekCount || 0) + 1;
+    }
+    res.json({
+      success: true,
+      data: {
+        cluePeekCount: session.cluePeekCount,
+        peekedClueKeys: session.peekedClueKeys,
+        liveScore: computeLiveRapportScore(session),
+        stillEligibleForBlackGold: (session.subtitleRevealedCount || 0) === 0 && session.cluePeekCount <= 1
       }
     });
   } catch (error) {

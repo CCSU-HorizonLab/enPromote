@@ -50,10 +50,48 @@
 
         <div class="question-content" :class="questionContentClass">
           <div v-if="currentQuestion.passage" class="passage-block">
-            <div class="passage-label">{{ passageLabel }}</div>
-            <div class="question-passage">{{ currentQuestion.passage }}</div>
+            <div class="passage-audio-toolbar">
+              <div class="passage-label">{{ passageLabel }}</div>
+              <div class="passage-audio-actions">
+                <button
+                  type="button"
+                  class="passage-audio-btn"
+                  @click="speakQuestionAudio(currentQuestion.passage)"
+                >
+                  {{ isSpeakingPassage ? '🔊 朗读中...' : '🔊 朗读材料' }}
+                </button>
+                <button
+                  v-if="currentQuestionType === 'scenario'"
+                  type="button"
+                  class="passage-blind-btn"
+                  :class="{ active: blindDialogueMode }"
+                  @click="blindDialogueMode = !blindDialogueMode"
+                >
+                  {{ blindDialogueMode ? '👁️ 显示原文' : '🎧 盲听试炼' }}
+                </button>
+              </div>
+            </div>
+
+            <div
+              v-if="currentQuestionType === 'scenario' && blindDialogueMode && !showResult"
+              class="dialogue-blind-mask"
+            >
+              <p>🎧 已开启盲听试炼：请先点击上方按钮听取英文对话并作答（交卷后或点击「显示原文」即可查看文本）</p>
+            </div>
+            <div v-else class="question-passage">{{ currentQuestion.passage }}</div>
           </div>
-          <h3 class="question-title">{{ questionPrompt }}</h3>
+          <div class="prompt-audio-row">
+            <h3 class="question-title">{{ questionPrompt }}</h3>
+            <button
+              v-if="questionPrompt"
+              type="button"
+              class="prompt-speak-btn"
+              @click="speakQuestionAudio(currentQuestion.passage ? `${currentQuestion.passage}. ${questionPrompt}` : questionPrompt)"
+              title="朗读题干"
+            >
+              🔊
+            </button>
+          </div>
           <p v-if="blankLabelText" class="blank-label">{{ blankLabelText }}</p>
           <p class="question-instruction">{{ questionInstruction }}</p>
         </div>
@@ -133,7 +171,8 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { playSpeechText, stopSpeechPlayback } from '@/utils/speechPlayer'
 
 // Props
 const props = defineProps({
@@ -170,6 +209,29 @@ const isCorrect = ref(false)
 const correctCount = ref(0)
 const showComplete = ref(false)
 const errorMessage = ref('')
+const blindDialogueMode = ref(false)
+const isSpeakingPassage = ref(false)
+
+const speakQuestionAudio = async (text) => {
+  if (!text) return
+  await playSpeechText({
+    text,
+    key: `aiq_${currentQuestionIndex.value}`,
+    onStart: () => {
+      isSpeakingPassage.value = true
+    },
+    onEnd: () => {
+      isSpeakingPassage.value = false
+    },
+    onError: () => {
+      isSpeakingPassage.value = false
+    }
+  })
+}
+
+onBeforeUnmount(() => {
+  stopSpeechPlayback()
+})
 
 // 计算属性
 const currentQuestion = computed(() => {
@@ -562,6 +624,8 @@ const submitAnswer = () => {
 }
 
 const nextQuestion = () => {
+  stopSpeechPlayback()
+  isSpeakingPassage.value = false
   if (currentQuestionIndex.value < questions.value.length - 1) {
     currentQuestionIndex.value++
     selectedOption.value = null
@@ -1133,5 +1197,54 @@ onMounted(() => {
   .completion-stats {
     gap: 1rem;
   }
+}
+
+.passage-audio-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.passage-audio-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.passage-audio-btn,
+.passage-blind-btn,
+.prompt-speak-btn {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.passage-blind-btn.active {
+  background: #4f46e5;
+  color: #ffffff;
+  border-color: #4f46e5;
+}
+
+.dialogue-blind-mask {
+  padding: 14px 16px;
+  background: #f1f5f9;
+  border: 1px dashed #94a3b8;
+  border-radius: 10px;
+  color: #475569;
+  font-size: 0.92rem;
+}
+
+.prompt-audio-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>
