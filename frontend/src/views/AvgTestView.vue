@@ -1,330 +1,429 @@
 <template>
   <div class="avg-test-page" :class="{ 'ng-plus-theme': runMode === 'ng_plus' }">
-    <!-- 顶部状态栏 -->
+    <!-- 顶部状态栏（精简去噪） -->
     <header class="top-nav">
-      <div class="nav-brand">
-        <button class="btn-back-module" @click="goBackToModuleA" title="返回模块 A 词汇/听力/AI题训练台">
-          {{ backTargetLabel }}
+      <div class="nav-left">
+        <button class="btn-back-module" @click="goBackToModuleA" title="返回训练台">
+          <span class="back-arrow">←</span>
+          <span class="back-text">{{ entryFrom === 'chapters' ? '大厅' : '训练台' }}</span>
         </button>
-        <span class="badge-tag" :class="{ 'ng-badge-tag': runMode === 'ng_plus' }">
-          {{ runMode === 'ng_plus' ? '📞 NG+ 二周目盲听挑战 · 3 回合' : 'AVG 语用沙盘 · 3 回合短平快博弈' }}
-        </span>
-        <h1>{{ scenarioData?.title || '正在加载剧本...' }}</h1>
+        <div class="nav-title-group">
+          <h1>{{ scenarioData?.title || '正在加载剧本...' }}</h1>
+          <span class="scene-location-chip" v-if="scenarioData?.sceneVisual?.sceneName">
+            📍 {{ scenarioData.sceneVisual.sceneName }}
+          </span>
+        </div>
       </div>
-      <div class="nav-status" v-if="scenarioData">
-        <div class="run-mode-switcher">
+
+      <div class="nav-center" v-if="scenarioData">
+        <!-- 运行模式切换器：面谈 vs 盲听 -->
+        <div class="run-mode-segmented">
           <button
-            class="run-mode-btn"
+            class="seg-btn"
             :class="{ active: runMode === 'standard' }"
             @click="switchRunMode('standard')"
             :disabled="loading"
-            title="一周目：酒店大堂面谈（有英文台词 + 卡牌/装配支持）"
+            title="一周目：大堂面谈（有台词显示与卡牌支持）"
           >
             👔 一周目·面谈
           </button>
           <button
-            class="run-mode-btn ng-btn"
+            class="seg-btn ng-seg-btn"
             :class="{ active: runMode === 'ng_plus' }"
             @click="switchRunMode('ng_plus')"
             :disabled="loading"
-            title="二周目：午夜电话纯盲听 + 随机突发变故（0 显露台词解锁黑金 3 星与模块 A 免修特权）"
+            title="二周目：午夜纯盲听（0 显露解锁黑金与免修特权）"
           >
             📞 二周目·盲听
           </button>
         </div>
-        <div class="status-pill score-pill" :class="getScoreClass(liveScore)">
-          <span class="label">好感折服度</span>
-          <span class="val">{{ liveScore }} / 100</span>
+      </div>
+
+      <div class="nav-right" v-if="scenarioData">
+        <!-- 回合指示 -->
+        <div class="nav-round-badge">
+          回合 <strong>{{ Math.min(3, currentRound + 1) }}/3</strong>
         </div>
-        <div class="status-pill round-pill">
-          <span class="label">当前进程</span>
-          <span class="val">第 {{ Math.min(3, currentRound + 1) }} / 3 回合</span>
+
+        <!-- 好感折服度极简胶囊 -->
+        <div class="nav-score-badge" :class="getScoreClass(liveScore)" title="实时好感折服度">
+          ⚖️ <strong>{{ liveScore }}</strong><small>/100</small>
         </div>
-        <button class="btn-ghost" @click="inputMode = (inputMode === 'cards' ? 'speak' : 'cards')">
-          {{ inputMode === 'cards' ? '🎙️ 切换至 Speak 模式' : '🎴 切换至 战术卡牌' }}
-        </button>
-        <!-- Gemini 3.8 Flash-Lite TTS 语音开关 -->
-        <button 
-          class="btn-tts-toggle" 
-          :class="{ 'tts-active': ttsEnabled }" 
+
+        <!-- 极简控制按钮组 -->
+        <button
+          class="nav-icon-btn"
+          :class="{ active: ttsEnabled }"
           @click="toggleTTS"
-          :title="ttsEnabled ? '点击关闭 Gemini 3.8 Flash-Lite TTS 角色语音朗读' : '点击开启 Gemini 3.8 Flash-Lite TTS 角色语音朗读'"
+          :title="ttsEnabled ? '点击关闭语音朗读' : '点击开启语音朗读'"
         >
-          <span class="tts-icon">{{ ttsEnabled ? '🔊' : '🔇' }}</span>
-          <span class="tts-label">TTS 语音: {{ ttsEnabled ? '开启' : '关闭' }}</span>
-          <span class="tts-model-chip">Gemini 3.8</span>
+          {{ ttsEnabled ? '🔊 语音' : '🔇 静音' }}
         </button>
-        <button class="btn-ghost" @click="showDossierModal = true">
-          📁 机密情报
+
+        <button class="nav-icon-btn" @click="showDossierModal = true" title="查看机密情报档案">
+          📁 档案
         </button>
-        <button class="btn-ghost" @click="resetSession" :disabled="loading">
-          🔄 重新演练
+
+        <button class="nav-icon-btn" @click="resetSession" :disabled="loading" title="重开本局">
+          🔄 重开
         </button>
       </div>
     </header>
 
-    <main class="main-layout" v-if="scenarioData">
-      <!-- 左栏：NPC 人设与确定性天平状态 -->
-      <aside class="npc-sidebar">
-        <!-- 角色立绘与情绪卡 -->
-        <div class="npc-card" :class="currentEmotion">
-          <div class="avatar-box">
-            <div class="avatar-placeholder" :class="currentEmotion">
-              <span class="avatar-icon">{{ npcIcon }}</span>
-            </div>
-            <div class="emotion-badge" :class="currentEmotion">
-              {{ emotionLabel }}
-            </div>
-          </div>
-          <div class="npc-info">
-            <h2>{{ scenarioData.npc.name }}</h2>
-            <span class="npc-title">{{ scenarioData.npc.title }}</span>
-            <p class="npc-persona">{{ scenarioData.npc.persona }}</p>
-          </div>
+    <main class="f2f-stage" v-if="scenarioData">
+      <!-- 1. 远景：伦敦豪华酒店午夜大堂矢量背景 -->
+      <div class="f2f-backdrop">
+        <svg viewBox="0 0 1440 900" class="hotel-backdrop-svg" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="wallGlowLeft" cx="16%" cy="35%" r="42%">
+              <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.25"/>
+              <stop offset="60%" stop-color="#78350f" stop-opacity="0.08"/>
+              <stop offset="100%" stop-color="#060a12" stop-opacity="0"/>
+            </radialGradient>
+            <radialGradient id="wallGlowRight" cx="84%" cy="32%" r="45%">
+              <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.2"/>
+              <stop offset="70%" stop-color="#78350f" stop-opacity="0.05"/>
+              <stop offset="100%" stop-color="#060a12" stop-opacity="0"/>
+            </radialGradient>
+            <linearGradient id="pillarGold" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#78350f"/>
+              <stop offset="50%" stop-color="#d97706"/>
+              <stop offset="100%" stop-color="#451a03"/>
+            </linearGradient>
+          </defs>
+
+          <!-- 奢华午夜墙面基底 -->
+          <rect width="1440" height="900" fill="#070b14"/>
+
+          <!-- 维多利亚暗纹竖条壁纸 -->
+          <g opacity="0.05">
+            <rect x="0" y="0" width="60" height="900" fill="#f8fafc"/>
+            <rect x="120" y="0" width="60" height="900" fill="#f8fafc"/>
+            <rect x="240" y="0" width="60" height="900" fill="#f8fafc"/>
+            <rect x="360" y="0" width="60" height="900" fill="#f8fafc"/>
+            <rect x="480" y="0" width="60" height="900" fill="#f8fafc"/>
+            <rect x="600" y="0" width="60" height="900" fill="#f8fafc"/>
+            <rect x="720" y="0" width="60" height="900" fill="#f8fafc"/>
+            <rect x="840" y="0" width="60" height="900" fill="#f8fafc"/>
+            <rect x="960" y="0" width="60" height="900" fill="#f8fafc"/>
+            <rect x="1080" y="0" width="60" height="900" fill="#f8fafc"/>
+            <rect x="1200" y="0" width="60" height="900" fill="#f8fafc"/>
+            <rect x="1320" y="0" width="60" height="900" fill="#f8fafc"/>
+          </g>
+
+          <!-- 左右暖黄壁灯氛围光晕 -->
+          <rect width="1440" height="900" fill="url(#wallGlowLeft)"/>
+          <rect width="1440" height="900" fill="url(#wallGlowRight)"/>
+
+          <!-- 左侧典雅立柱与黄铜壁灯 -->
+          <rect x="80" y="0" width="54" height="720" fill="#0d0704" stroke="#29150b" stroke-width="2"/>
+          <rect x="74" y="210" width="66" height="12" fill="url(#pillarGold)"/>
+          <rect x="74" y="0" width="66" height="24" fill="url(#pillarGold)"/>
+          <path d="M 107 265 L 107 305 L 117 315" stroke="#f59e0b" stroke-width="4" fill="none"/>
+          <circle cx="107" cy="255" r="14" fill="#fbbf24" opacity="0.95"/>
+          <circle cx="107" cy="255" r="28" fill="#f59e0b" opacity="0.4"/>
+
+          <!-- 右侧立柱与壁灯 -->
+          <rect x="1300" y="0" width="54" height="720" fill="#0d0704" stroke="#29150b" stroke-width="2"/>
+          <rect x="1294" y="210" width="66" height="12" fill="url(#pillarGold)"/>
+          <rect x="1294" y="0" width="66" height="24" fill="url(#pillarGold)"/>
+          <path d="M 1327 265 L 1327 305 L 1317 315" stroke="#f59e0b" stroke-width="4" fill="none"/>
+          <circle cx="1327" cy="255" r="14" fill="#fbbf24" opacity="0.95"/>
+          <circle cx="1327" cy="255" r="28" fill="#f59e0b" opacity="0.4"/>
+
+          <!-- 远景右侧：客房钥匙格橱 (Room Pigeonholes) -->
+          <g transform="translate(860, 110)">
+            <rect x="0" y="0" width="380" height="210" rx="8" fill="#120905" stroke="#3b1d0e" stroke-width="3"/>
+            <rect x="6" y="6" width="368" height="26" fill="#241208"/>
+            <text x="190" y="23" font-size="11" font-family="serif" font-weight="900" fill="#d97706" text-anchor="middle" letter-spacing="2">KEY SERVICE · ROOM PIGEONHOLES</text>
+            <g fill="#070302" stroke="#2b1409" stroke-width="1.5">
+              <!-- 行 1 -->
+              <rect x="20" y="42" width="50" height="34" rx="3"/><circle cx="45" cy="54" r="3.5" fill="#f59e0b"/>
+              <rect x="80" y="42" width="50" height="34" rx="3"/><circle cx="105" cy="54" r="3.5" fill="#f59e0b"/>
+              <rect x="140" y="42" width="50" height="34" rx="3"/>
+              <rect x="200" y="42" width="50" height="34" rx="3"/><circle cx="225" cy="54" r="3.5" fill="#f59e0b"/>
+              <rect x="260" y="42" width="50" height="34" rx="3"/>
+              <rect x="320" y="42" width="40" height="34" rx="3"/><circle cx="340" cy="54" r="3.5" fill="#f59e0b"/>
+              <!-- 行 2 -->
+              <rect x="20" y="86" width="50" height="34" rx="3"/><circle cx="45" cy="98" r="3.5" fill="#f59e0b"/>
+              <rect x="80" y="86" width="50" height="34" rx="3"/>
+              <rect x="140" y="86" width="50" height="34" rx="3"/><circle cx="165" cy="98" r="3.5" fill="#f59e0b"/>
+              <rect x="200" y="86" width="50" height="34" rx="3"/><circle cx="225" cy="98" r="3.5" fill="#f59e0b"/>
+              <rect x="260" y="86" width="50" height="34" rx="3"/><circle cx="285" cy="98" r="3.5" fill="#f59e0b"/>
+              <rect x="320" y="86" width="40" height="34" rx="3"/>
+              <!-- 行 3 (85分顶层套房锁位) -->
+              <rect x="20" y="130" width="50" height="34" rx="3"/>
+              <rect x="80" y="130" width="50" height="34" rx="3"/><circle cx="105" cy="142" r="3.5" fill="#f59e0b"/>
+              <rect x="140" y="130" width="50" height="34" rx="3"/>
+              <rect x="200" y="130" width="50" height="34" rx="3"/><circle cx="225" cy="142" r="3.5" fill="#f59e0b"/>
+              <rect x="260" y="130" width="50" height="34" rx="3"/>
+              <rect x="320" y="130" width="40" height="34" rx="3" stroke="#f59e0b" stroke-width="2.5"/><circle cx="340" cy="142" r="4.5" fill="#fbbf24"/>
+            </g>
+          </g>
+
+          <!-- 远景中央：复古罗马大挂钟 (时间固定在午夜 23:45 契合剧情) -->
+          <g transform="translate(560, 50)">
+            <circle cx="65" cy="65" r="58" fill="#140a06" stroke="#d97706" stroke-width="4"/>
+            <circle cx="65" cy="65" r="50" fill="#fef3c7" stroke="#78350f" stroke-width="1.5"/>
+            <text x="65" y="32" font-size="12" font-family="serif" font-weight="900" fill="#451a03" text-anchor="middle">XII</text>
+            <text x="104" y="70" font-size="11" font-family="serif" font-weight="900" fill="#451a03" text-anchor="middle">III</text>
+            <text x="65" y="106" font-size="11" font-family="serif" font-weight="900" fill="#451a03" text-anchor="middle">VI</text>
+            <text x="26" y="70" font-size="11" font-family="serif" font-weight="900" fill="#451a03" text-anchor="middle">IX</text>
+            <!-- 时针指向 11点与12点之间 (23点) -->
+            <line x1="65" y1="65" x2="48" y2="38" stroke="#451a03" stroke-width="3.5" stroke-linecap="round"/>
+            <!-- 分针指向 9点 (45分) -->
+            <line x1="65" y1="65" x2="30" y2="65" stroke="#78350f" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="65" cy="65" r="4" fill="#d97706"/>
+          </g>
+        </svg>
+      </div>
+
+      <!-- 2. 中近景人物与对白联动舞台 (固定紧邻间距，无论窗口多大始终紧依人物) -->
+      <div class="f2f-actor-stage">
+        <!-- Arthur 矢量半身立绘 (站在柜台后，眉眼神态动态切换) -->
+        <div class="f2f-character-layer" :class="currentEmotion">
+        <div class="character-sprite-container">
+          <div class="character-glow-aura" :class="currentEmotion"></div>
+          <svg viewBox="0 0 420 560" class="arthur-svg" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="suitGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#1e293b"/>
+                <stop offset="50%" stop-color="#0f172a"/>
+                <stop offset="100%" stop-color="#090e17"/>
+              </linearGradient>
+              <linearGradient id="lapelGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#334155"/>
+                <stop offset="100%" stop-color="#1e293b"/>
+              </linearGradient>
+              <linearGradient id="goldPlate" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#fef08a"/>
+                <stop offset="50%" stop-color="#f59e0b"/>
+                <stop offset="100%" stop-color="#b45309"/>
+              </linearGradient>
+              <linearGradient id="tieGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#991b1b"/>
+                <stop offset="100%" stop-color="#450a0a"/>
+              </linearGradient>
+              <linearGradient id="hairGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#f1f5f9"/>
+                <stop offset="60%" stop-color="#94a3b8"/>
+                <stop offset="100%" stop-color="#64748b"/>
+              </linearGradient>
+            </defs>
+
+            <!-- 躯干西装与肩线 -->
+            <path d="M 60 320 Q 210 280 360 320 L 400 560 L 20 560 Z" fill="url(#suitGrad)"/>
+
+            <!-- 白衬衫与硬领 -->
+            <polygon points="175,270 245,270 230,375 190,375" fill="#f8fafc"/>
+            <polygon points="160,265 210,310 185,315" fill="#e2e8f0"/>
+            <polygon points="260,265 210,310 235,315" fill="#cbd5e1"/>
+
+            <!-- 暗红真丝领带 -->
+            <polygon points="202,305 218,305 226,440 210,470 194,440" fill="url(#tieGrad)"/>
+            <!-- 黄铜领带夹 -->
+            <rect x="200" y="375" width="20" height="4" rx="1" fill="url(#goldPlate)"/>
+
+            <!-- 考究西装驳领 -->
+            <path d="M 115 320 L 195 440 L 175 440 L 90 350 Z" fill="url(#lapelGrad)"/>
+            <path d="M 305 320 L 225 440 L 245 440 L 330 350 Z" fill="url(#lapelGrad)"/>
+
+            <!-- 胸袋巾与金属工牌 (Arthur - Duty Manager) -->
+            <polygon points="280,360 295,348 305,356 290,365" fill="#f8fafc"/>
+            <rect x="268" y="375" width="52" height="20" rx="3" fill="url(#goldPlate)" stroke="#78350f" stroke-width="1"/>
+            <text x="294" y="386" font-size="7" font-family="sans-serif" font-weight="900" fill="#451a03" text-anchor="middle">ARTHUR</text>
+            <text x="294" y="392" font-size="4.8" font-family="sans-serif" font-weight="700" fill="#78350f" text-anchor="middle">DUTY MANAGER</text>
+
+            <!-- 脖颈 -->
+            <rect x="185" y="235" width="50" height="45" rx="4" fill="#fcd34d"/>
+
+            <!-- 头部底色 -->
+            <ellipse cx="210" cy="180" rx="65" ry="75" fill="#fef08a"/>
+
+            <!-- 耳朵 -->
+            <ellipse cx="145" cy="185" rx="9" ry="16" fill="#fcd34d"/>
+            <ellipse cx="275" cy="185" rx="9" ry="16" fill="#fcd34d"/>
+
+            <!-- 绅士银灰分头秀发 -->
+            <path d="M 142 165 C 140 100, 200 85, 278 120 C 275 100, 250 85, 210 85 C 160 85, 135 120, 142 165 Z" fill="url(#hairGrad)"/>
+            <path d="M 140 160 Q 180 120 275 140 C 270 125, 240 105, 190 115 C 150 125, 142 145, 140 160 Z" fill="#ffffff" opacity="0.3"/>
+
+            <!-- 金丝半框眼镜 -->
+            <rect x="162" y="166" width="36" height="22" rx="4" fill="none" stroke="#d97706" stroke-width="2.5"/>
+            <rect x="222" y="166" width="36" height="22" rx="4" fill="none" stroke="#d97706" stroke-width="2.5"/>
+            <line x1="198" y1="174" x2="222" y2="174" stroke="#d97706" stroke-width="2.5"/>
+            <line x1="148" y1="172" x2="162" y2="172" stroke="#d97706" stroke-width="1.8"/>
+            <line x1="258" y1="172" x2="272" y2="172" stroke="#d97706" stroke-width="1.8"/>
+            <!-- 镜片反光 -->
+            <line x1="168" y1="184" x2="188" y2="170" stroke="rgba(255,255,255,0.7)" stroke-width="1.5"/>
+            <line x1="228" y1="184" x2="248" y2="170" stroke="rgba(255,255,255,0.7)" stroke-width="1.5"/>
+
+            <!-- 专注目光双眼 -->
+            <ellipse cx="180" cy="177" rx="6" ry="4" fill="#0f172a"/>
+            <circle cx="182" cy="175" r="1.5" fill="#ffffff"/>
+            <ellipse cx="240" cy="177" rx="6" ry="4" fill="#0f172a"/>
+            <circle cx="242" cy="175" r="1.5" fill="#ffffff"/>
+
+            <!-- 鼻梁 -->
+            <path d="M 210 168 L 206 195 L 214 195 Z" fill="#f59e0b" opacity="0.5"/>
+
+            <!-- 英伦短髭胡子 -->
+            <path d="M 188 206 Q 210 200 232 206 Q 220 216 210 210 Q 200 216 188 206 Z" fill="url(#hairGrad)"/>
+
+            <!-- 动态情绪神态：眉毛与唇线切换 -->
+            <!-- 情绪 1: 一丝不苟 (Neutral) -->
+            <g v-if="currentEmotion === 'neutral'">
+              <path d="M 165 158 Q 182 154 196 158" stroke="#475569" stroke-width="3" stroke-linecap="round" fill="none"/>
+              <path d="M 224 158 Q 238 154 255 158" stroke="#475569" stroke-width="3" stroke-linecap="round" fill="none"/>
+              <line x1="202" y1="222" x2="218" y2="222" stroke="#b45309" stroke-width="2.5" stroke-linecap="round"/>
+            </g>
+
+            <!-- 情绪 2: 挑眉审视 (Skeptical) -->
+            <g v-else-if="currentEmotion === 'skeptical'">
+              <!-- 左眉高挑 -->
+              <path d="M 164 148 Q 180 140 196 152" stroke="#475569" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+              <!-- 右眉微压 -->
+              <path d="M 224 160 Q 240 157 256 162" stroke="#475569" stroke-width="3" stroke-linecap="round" fill="none"/>
+              <path d="M 200 224 Q 210 220 220 222" stroke="#b45309" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+            </g>
+
+            <!-- 情绪 3: 皱眉严苛 (Annoyed) -->
+            <g v-else-if="currentEmotion === 'annoyed'">
+              <!-- 双眉倒竖压向眉心 -->
+              <path d="M 165 156 Q 185 163 198 165" stroke="#475569" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+              <path d="M 222 165 Q 235 163 255 156" stroke="#475569" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+              <!-- 紧抿微下垂唇形 -->
+              <path d="M 200 226 Q 210 220 220 226" stroke="#b45309" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+            </g>
+
+            <!-- 情绪 4: 折服赞许 (Pleased) -->
+            <g v-else-if="currentEmotion === 'pleased'">
+              <!-- 舒展温和眉毛 -->
+              <path d="M 166 154 Q 182 150 197 154" stroke="#475569" stroke-width="3" stroke-linecap="round" fill="none"/>
+              <path d="M 223 154 Q 238 150 254 154" stroke="#475569" stroke-width="3" stroke-linecap="round" fill="none"/>
+              <!-- 优雅微笑 -->
+              <path d="M 200 220 Q 210 229 220 220" stroke="#059669" stroke-width="3" stroke-linecap="round" fill="none"/>
+              <!-- 手持 3星顶层套房黑金房卡 -->
+              <g transform="translate(100, 420) rotate(-14)">
+                <rect x="0" y="0" width="68" height="42" rx="4" fill="#09090b" stroke="#f59e0b" stroke-width="2.5"/>
+                <text x="34" y="16" font-size="7" font-family="sans-serif" font-weight="900" fill="#fbbf24" text-anchor="middle">THE RITZ</text>
+                <text x="34" y="27" font-size="5.5" font-family="sans-serif" font-weight="700" fill="#fef08a" text-anchor="middle">VIP SUITE ★★★</text>
+                <circle cx="58" cy="21" r="3" fill="#10b981"/>
+              </g>
+            </g>
+          </svg>
         </div>
+      </div>
 
-        <!-- 确定性社交破防天平 (去仪表盘化，突出状态) -->
-        <div class="tracker-card meter-card">
-          <div class="card-header">
-            <span class="icon">⚖️</span>
-            <h3>好感天平 (Rapport Meter)</h3>
-            <span class="meter-status-tag" :class="getScoreClass(liveScore)">
-              {{ getScoreTitle(liveScore) }}
-            </span>
-          </div>
+      <!-- 3. 中景悬浮语音气泡 (Floating Dialogue Balloon: 居于 Arthur 右侧开阔区域) -->
+      <div
+        class="f2f-speech-balloon"
+        :class="{
+          'speaking': isPlayingVoice(latestNpcMessage.key),
+          'masked': isBubbleMasked(latestNpcMessage.key)
+        }"
+      >
+        <!-- 指向 Arthur 肩膀的气泡小尾巴 -->
+        <div class="balloon-tail"></div>
 
-          <!-- 刻度能量进度条 -->
-          <div class="meter-bar-container">
-            <div class="meter-bar-track">
-              <div
-                class="meter-bar-fill"
-                :style="{ width: `${liveScore}%` }"
-                :class="getScoreClass(liveScore)"
-              ></div>
-              <!-- 达标及格线 (65分) 与 高光升房线 (85分) -->
-              <div class="marker marker-standard" title="65分及格线 (标准间入住)">
-                <span class="marker-label">65 (标间)</span>
-              </div>
-              <div class="marker marker-penthouse" title="85分高光线 (行政套房升级)">
-                <span class="marker-label">85 (套房)</span>
-              </div>
+        <div class="balloon-header">
+          <div class="speaker-tag">
+            <span class="speaker-avatar-icon">{{ npcIcon }}</span>
+            <div class="speaker-name-group">
+              <strong>{{ scenarioData.npc.name }}</strong>
+              <small>{{ scenarioData.npc.title }}</small>
             </div>
-            <div class="meter-score-text">
-              <span class="current-score">{{ liveScore }}</span>
-              <span class="total-score">/ 100 实时好感度</span>
-            </div>
+            <span class="emotion-micro-badge" :class="currentEmotion">{{ emotionLabel }}</span>
           </div>
 
-          <!-- 极简目标达成状态 -->
-          <div class="rubric-breakdown">
-            <div class="rubric-item" :class="{ achieved: factsVerified.includes('hasNameStated') || factsVerified.includes('hasProofProvided') }">
-              <span class="r-dot">{{ (factsVerified.includes('hasNameStated') || factsVerified.includes('hasProofProvided')) ? '✅' : '⚪' }}</span>
-              <span class="r-text">身份核验状态 ({{ (factsVerified.includes('hasNameStated') || factsVerified.includes('hasProofProvided')) ? '已确认预订' : '待出示凭证/姓名' }})</span>
-            </div>
-            <div class="rubric-item" :class="{ achieved: liveScore >= 75 }">
-              <span class="r-dot">{{ liveScore >= 75 ? '✨' : '⏳' }}</span>
-              <span class="r-text">升房契机 ({{ liveScore >= 75 ? '好感充沛，可提升房' : '好感蓄力中，切忌抢跑' }})</span>
-            </div>
-          </div>
-        </div>
+          <div class="balloon-header-actions">
+            <!-- TTS 重新朗读按键 -->
+            <button
+              class="btn-audio-speak"
+              :class="{ 'is-playing': isPlayingVoice(latestNpcMessage.key), 'is-loading': isLoadingVoice(latestNpcMessage.key) }"
+              @click="playSpeech(latestNpcMessage.content, latestNpcMessage.key, latestNpcMessage.audio)"
+              :title="isPlayingVoice(latestNpcMessage.key) ? '点击停止' : '重新播放此句英文发音 (Gemini 3.8 TTS)'"
+            >
+              <span v-if="isLoadingVoice(latestNpcMessage.key)" class="spin-icon">⏳</span>
+              <span v-else-if="isPlayingVoice(latestNpcMessage.key)" class="wave-icon">🔊 朗读中</span>
+              <span v-else>🔊 朗读</span>
+            </button>
 
-        <!-- 剧情情境动机 (Dramatic Context) -->
-        <div class="context-card">
-          <div class="card-header">
-            <span class="icon">🎭</span>
-            <h3>当前情境动机 (Context)</h3>
-          </div>
-          <div class="context-item">
-            <span class="label">前因缘由:</span>
-            <p>{{ scenarioData.dramaticContext.whyHere }}</p>
-          </div>
-          <div class="context-item">
-            <span class="label">心理状态:</span>
-            <p class="mood-highlight">{{ scenarioData.dramaticContext.currentMentalState }}</p>
-          </div>
-          <div class="context-item">
-            <span class="label">破防软肋:</span>
-            <p class="soft-spot">{{ scenarioData.dramaticContext.hiddenSoftSpot }}</p>
-          </div>
-        </div>
-      </aside>
-
-      <!-- 右栏：对话推进舞台与行动区 -->
-      <section class="stage-section">
-        <!-- 关卡通关目标条与阶段节奏提示 (紧凑两行布局，保证下方对话视窗宽敞不被遮挡) -->
-        <div class="objective-banner" :class="{ 'ng-objective-banner': runMode === 'ng_plus' }">
-          <div class="objective-top-row">
-            <span class="target-flag">
-              {{ runMode === 'ng_plus' ? '📞 二周目·午夜盲听' : '🎯 任务目标' }}
-            </span>
-            <p class="objective-text" v-if="runMode === 'ng_plus'">
-              听清来电突发状况并临场拆招 · 全程 0 显露台词拿 3★ 解锁黑金
-            </p>
-            <p class="objective-text" v-else>{{ scenarioData.objectiveDescription }}</p>
-            <div class="ng-blind-status-row" v-if="runMode === 'ng_plus' && !isCompleted">
-              <span class="ng-status-chip" :class="subtitleRevealedCount === 0 ? 'chip-gold' : 'chip-warn'">
-                {{ subtitleRevealedCount === 0 ? '🎧 0 显露 · 黑金有效' : `👁️ 已显露 ${subtitleRevealedCount} 次` }}
-              </span>
-              <span class="ng-status-chip" :class="twistAddressed ? 'chip-ok' : 'chip-pending'">
-                {{ twistAddressed ? '✅ 已回应变故' : '⚠️ 待破来电变故' }}
-              </span>
-            </div>
-          </div>
-          <div class="pacing-pill" :class="pacingInfo.phase" v-if="!isCompleted">
-            <span class="pacing-badge">{{ pacingInfo.label }}</span>
-            <span class="pacing-hint">{{ pacingInfo.hint }}</span>
-          </div>
-        </div>
-
-        <!-- 对话历史回放区 -->
-        <div class="chat-viewport" ref="chatViewportRef">
-          <!-- 二周目盲听：先点击接听开始，再播放第 1 句 -->
-          <div v-if="runMode === 'ng_plus' && !ngCallStarted" class="ng-incoming-call-card">
-            <div class="incoming-ring-badge">📞 午夜内线来电待接听...</div>
-            <h3>{{ scenarioData.npc.name }} 经理正在连线</h3>
-            <p>
-              本局为<strong>二周目纯盲听挑战</strong>（含随机隐藏突发变故）。请戴好耳机或调高音量，准备就绪后点击下方按钮接听并收听第 1 句来电！
-            </p>
-            <button class="btn-start-blind-call" @click="startNgPlusCall">
-              🎧 点击接听并开始盲听（播放第 1 句）
+            <!-- 历史对白记录入口 -->
+            <button class="btn-history-toggle" @click="showHistoryDrawer = true" title="查看所有轮次交涉历史">
+              📜 历史 ({{ messages.length }})
             </button>
           </div>
+        </div>
 
-          <!-- 开场白 -->
-          <div v-else class="chat-row npc-row">
-            <div class="bubble npc-bubble" :class="{ 'speaking-bubble': isPlayingVoice('opening'), 'masked-bubble': isBubbleMasked('opening') }">
-              <div class="bubble-header-row">
-                <span class="speaker">{{ scenarioData.npc.name }} <small v-if="runMode === 'ng_plus'" class="call-tag">📞 午夜内线</small></span>
-                <button
-                  class="btn-audio-speak"
-                  :class="{ 'is-playing': isPlayingVoice('opening'), 'is-loading': isLoadingVoice('opening') }"
-                  @click="playSpeech(scenarioData.openingLine, 'opening')"
-                  :title="isPlayingVoice('opening') ? '点击停止' : '播放开场语音 (Gemini 3.8 TTS)'"
-                >
-                  <span v-if="isLoadingVoice('opening')" class="spin-icon">⏳</span>
-                  <span v-else-if="isPlayingVoice('opening')" class="wave-icon">🔊 朗读中</span>
-                  <span v-else>🔊 朗读</span>
-                </button>
-              </div>
-              <div v-if="isBubbleMasked('opening')" class="blind-audio-mask">
-                <div class="blind-wave-row" @click="playSpeech(scenarioData.openingLine, 'opening')">
-                  <span class="blind-phone-icon">{{ isPlayingVoice('opening') ? '🔊' : '🎧' }}</span>
-                  <div class="blind-bars" :class="{ animating: isPlayingVoice('opening') }">
-                    <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-                  </div>
-                  <span class="blind-prompt-text">
-                    {{ isPlayingVoice('opening') ? '来电播放中，请听清对方提出的突发状况...' : '点击收听午夜来电语音（文本已盲听遮罩）' }}
-                  </span>
-                </div>
-                <div v-if="peekedClueKeys.includes('opening')" class="blind-clue-strip">
-                  <span class="clue-label">💡 要点线索：</span>
-                  <span v-for="chip in getClueChipsForBubble('opening', scenarioData.openingLine)" :key="chip" class="clue-chip">
-                    {{ chip }}
-                  </span>
-                </div>
-                <div class="blind-actions-row">
-                  <button
-                    v-if="!peekedClueKeys.includes('opening')"
-                    class="btn-peek-clue"
-                    @click.stop="peekClue('opening')"
-                    title="仅查看要点关键词线索（限1次内可保留黑金，扣5分）"
-                  >
-                    💡 要点线索 ({{ cluePeekCount === 0 ? '保黑金-5分' : '再看破纯度' }})
-                  </button>
-                  <button class="btn-reveal-subtitle" @click.stop="revealSubtitle('opening')">
-                    👁️ 显露完整台词 (破黑金)
-                  </button>
-                </div>
-              </div>
-              <p v-else class="speech-text">{{ scenarioData.openingLine }}</p>
+        <!-- NPC 当前神态与心境微标 -->
+        <div class="balloon-status-hint">
+          <span>🧠 {{ currentStatusPrompt }}</span>
+        </div>
+
+        <!-- 盲听模式遮罩态 vs 正常英文台词态 -->
+        <div v-if="isBubbleMasked(latestNpcMessage.key)" class="balloon-blind-content">
+          <div class="blind-wave-row" @click="playSpeech(latestNpcMessage.content, latestNpcMessage.key, latestNpcMessage.audio)">
+            <span class="blind-phone-icon">{{ isPlayingVoice(latestNpcMessage.key) ? '🔊' : '🎧' }}</span>
+            <div class="blind-bars" :class="{ animating: isPlayingVoice(latestNpcMessage.key) }">
+              <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
             </div>
+            <span class="blind-prompt-text">
+              {{ isPlayingVoice(latestNpcMessage.key) ? '来电播放中，请听清对方提出的突发变故...' : '点击收听午夜来电语音（文本已盲听遮罩）' }}
+            </span>
           </div>
-
-          <!-- 交互历史 -->
-          <div
-            v-for="(msg, index) in messages"
-            :key="index"
-            class="chat-row"
-            :class="msg.role === 'user' ? 'user-row' : 'npc-row'"
-          >
-            <div 
-              class="bubble" 
-              :class="[
-                msg.role === 'user' ? 'user-bubble' : 'npc-bubble',
-                isPlayingVoice('msg_' + index) ? 'speaking-bubble' : '',
-                msg.role === 'assistant' && isBubbleMasked('msg_' + index) ? 'masked-bubble' : ''
-              ]"
+          <div v-if="peekedClueKeys.includes(latestNpcMessage.key)" class="blind-clue-strip">
+            <span class="clue-label">💡 要点线索：</span>
+            <span v-for="chip in getClueChipsForBubble(latestNpcMessage.key, latestNpcMessage.content)" :key="chip" class="clue-chip">
+              {{ chip }}
+            </span>
+          </div>
+          <div class="blind-actions-row">
+            <button
+              v-if="!peekedClueKeys.includes(latestNpcMessage.key)"
+              class="btn-peek-clue"
+              @click.stop="peekClue(latestNpcMessage.key)"
+              title="仅查看要点关键词线索（限1次内可保留黑金，扣5分）"
             >
-              <div class="bubble-header-row" v-if="msg.role === 'assistant'">
-                <span class="speaker">{{ scenarioData.npc.name }} <small v-if="runMode === 'ng_plus'" class="call-tag">📞 午夜内线</small></span>
-                <button
-                  class="btn-audio-speak"
-                  :class="{ 'is-playing': isPlayingVoice('msg_' + index), 'is-loading': isLoadingVoice('msg_' + index) }"
-                  @click="playSpeech(msg.content, 'msg_' + index, msg.audio)"
-                  :title="isPlayingVoice('msg_' + index) ? '点击停止' : '播放语音 (Gemini 3.8 TTS)'"
-                >
-                  <span v-if="isLoadingVoice('msg_' + index)" class="spin-icon">⏳</span>
-                  <span v-else-if="isPlayingVoice('msg_' + index)" class="wave-icon">🔊 朗读中</span>
-                  <span v-else>🔊 朗读</span>
-                </button>
-              </div>
-              <div class="user-bubble-header" v-else>
-                <span class="speaker">You</span>
-                <span v-if="msg.isVoiceInput" class="voice-input-tag">🎙️ 语音脱稿实录</span>
-              </div>
-              <div v-if="msg.role === 'assistant' && isBubbleMasked('msg_' + index)" class="blind-audio-mask">
-                <div class="blind-wave-row" @click="playSpeech(msg.content, 'msg_' + index, msg.audio)">
-                  <span class="blind-phone-icon">{{ isPlayingVoice('msg_' + index) ? '🔊' : '🎧' }}</span>
-                  <div class="blind-bars" :class="{ animating: isPlayingVoice('msg_' + index) }">
-                    <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-                  </div>
-                  <span class="blind-prompt-text">
-                    {{ isPlayingVoice('msg_' + index) ? 'Arthur 正在电话回应中...' : '点击重听该回合来电语音' }}
-                  </span>
-                </div>
-                <div v-if="peekedClueKeys.includes('msg_' + index)" class="blind-clue-strip">
-                  <span class="clue-label">💡 要点线索：</span>
-                  <span v-for="chip in getClueChipsForBubble('msg_' + index, msg.content)" :key="chip" class="clue-chip">
-                    {{ chip }}
-                  </span>
-                </div>
-                <div class="blind-actions-row">
-                  <button
-                    v-if="!peekedClueKeys.includes('msg_' + index)"
-                    class="btn-peek-clue"
-                    @click.stop="peekClue('msg_' + index)"
-                    title="仅查看要点关键词线索（限1次内可保留黑金，扣5分）"
-                  >
-                    💡 要点线索 ({{ cluePeekCount === 0 ? '保黑金-5分' : '再看破纯度' }})
-                  </button>
-                  <button class="btn-reveal-subtitle" @click.stop="revealSubtitle('msg_' + index)">
-                    👁️ 显露完整台词 (破黑金)
-                  </button>
-                </div>
-              </div>
-              <p v-else class="speech-text">{{ msg.content }}</p>
-
-              <!-- 极简游戏动态浮标标签 (拒绝大段垃圾语法弹窗) -->
-              <div v-if="msg.evaluation" class="eval-card">
-                <div class="eval-chips">
-                  <span class="chip dynamic-chip" :class="msg.evaluation.dynamicTag?.includes('⚠️') ? 'chip-danger' : 'chip-success'">
-                    {{ msg.evaluation.dynamicTag || '⚡ 得体回应' }}
-                  </span>
-                  <span class="chip tone-chip">
-                    🎩 礼貌修养: {{ msg.evaluation.toneScore }}/30 ({{ msg.evaluation.toneFeedback }})
-                  </span>
-                </div>
-              </div>
-            </div>
+              💡 要点线索 ({{ cluePeekCount === 0 ? '保黑金-5分' : '再看破纯度' }})
+            </button>
+            <button class="btn-reveal-subtitle" @click.stop="revealSubtitle(latestNpcMessage.key)">
+              👁️ 显露完整台词 (破黑金)
+            </button>
           </div>
+        </div>
 
-          <!-- 正在思考指示 -->
-          <div v-if="loading" class="chat-row npc-row">
-            <div class="bubble npc-bubble thinking-bubble">
-              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-              <span class="thinking-text">{{ scenarioData.npc.name }} 正在核对终端与审视你的回答...</span>
-            </div>
+        <div v-else class="balloon-speech-content">
+          <p class="npc-speech-p">"{{ latestNpcMessage.content }}"</p>
+        </div>
+
+        <!-- 玩家上一句发言的微缩回声 (Echo)，让交涉有来有往 -->
+        <div v-if="latestUserMessage" class="balloon-user-echo">
+          <span class="echo-speaker">You:</span>
+          <span class="echo-text">"{{ latestUserMessage.content }}"</span>
+          <div v-if="latestUserMessage.evaluation" class="echo-eval-tags">
+            <span v-if="latestUserMessage.evaluation.stanceIdentified" class="eval-mini-pill pill-ok">
+              ⚡ {{ latestUserMessage.evaluation.stanceIdentified }}
+            </span>
+            <span v-if="latestUserMessage.evaluation.politenessScore" class="eval-mini-pill pill-tone">
+              🎩 礼貌 {{ latestUserMessage.evaluation.politenessScore }}/30
+            </span>
+            <span v-if="latestUserMessage.evaluation.pacingPenalty" class="eval-mini-pill pill-warn">
+              ⚠️ 操之过急 -{{ latestUserMessage.evaluation.pacingPenalty }}
+            </span>
           </div>
+        </div>
+
+        <!-- 正在思考指示 (加载中气泡附带态) -->
+        <div v-if="loading" class="balloon-thinking-strip">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="thinking-text">{{ scenarioData.npc.name }} 正在审视并权衡...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. 浮动结算账单容器 (覆盖在中景大堂上) -->
+      <div v-if="isCompleted && settlementData" class="settlement-overlay">
 
           <!-- 结案真实消费小票卡片 (Receipt Card) -->
           <div
@@ -397,28 +496,38 @@
               <p>"{{ settlementData.npcFinalReply }}"</p>
             </div>
 
-            <!-- 客观明牌小票得分明细 -->
+            <!-- 客观明牌小票得分明细 (支持一键折叠/展开，默认呈现精练结论) -->
             <div class="receipt-breakdown">
-              <div class="breakdown-title">📊 社交天平实战得分账本 (100% 实力归因)</div>
-              <div class="breakdown-grid">
+              <div class="breakdown-head-bar" @click="showBreakdownDetails = !showBreakdownDetails">
+                <div class="bh-left">
+                  <span class="breakdown-title">📊 社交天平实战得分账本</span>
+                  <span class="breakdown-score-badge">{{ settlementData.finalScore }} / 100 分</span>
+                </div>
+                <button type="button" class="btn-toggle-breakdown">
+                  {{ showBreakdownDetails ? '收起明细 ▴' : '展开细目 ▾' }}
+                </button>
+              </div>
+
+              <!-- 展开的明细项 -->
+              <div v-if="showBreakdownDetails" class="breakdown-grid">
                 <div class="b-row">
                   <span>事实信息核验 (姓名/凭证)：</span>
                   <strong>+{{ settlementData.scoreBreakdown.factClarityScore }} 分</strong>
                 </div>
                 <div class="b-row highlight-stance-row">
-                  <span>🛡️ 社交润滑招式 (How · 委婉商量语气)：</span>
+                  <span>🛡️ 社交润滑招式 (委婉商量语气)：</span>
                   <strong class="color-stance">+{{ settlementData.scoreBreakdown.pragmaticStanceScore ?? 15 }} 分</strong>
                 </div>
                 <div class="b-row highlight-chunk-row">
-                  <span>📦 场景业务零件 (What · 酒店事实短语)：</span>
+                  <span>📦 场景业务零件 (酒店事实短语)：</span>
                   <strong class="color-chunk">+{{ settlementData.scoreBreakdown.domainChunksScore ?? 15 }} 分</strong>
                 </div>
                 <div class="b-row">
-                  <span>英伦绅士礼仪 (LLM 得体度判定)：</span>
+                  <span>英伦绅士礼仪 (得体度判定)：</span>
                   <strong>+{{ settlementData.scoreBreakdown.toneScore }} 分</strong>
                 </div>
                 <div class="b-row penalty-row" v-if="settlementData.scoreBreakdown.roteMemorizationPenalty > 0">
-                  <span>📵 未回应二周目变故 (防死背扣减)：</span>
+                  <span>📵 未回应二周目变故扣减：</span>
                   <strong class="color-danger">-{{ settlementData.scoreBreakdown.roteMemorizationPenalty }} 分</strong>
                 </div>
                 <div class="b-row penalty-row" v-if="(settlementData.scoreBreakdown.cluePeekPenalty || 0) > 0">
@@ -427,15 +536,11 @@
                 </div>
                 <div class="b-row penalty-row" v-if="(settlementData.scoreBreakdown.deductions - (settlementData.scoreBreakdown.roteMemorizationPenalty || 0) - (settlementData.scoreBreakdown.cluePeekPenalty || 0)) > 0">
                   <span>违规/操之过急扣减：</span>
-                  <strong>-{{ settlementData.scoreBreakdown.deductions - (settlementData.scoreBreakdown.roteMemorizationPenalty || 0) - (settlementData.scoreBreakdown.cluePeekPenalty || 0) }} 分</strong>
+                  <strong class="color-danger">-{{ settlementData.scoreBreakdown.deductions - (settlementData.scoreBreakdown.roteMemorizationPenalty || 0) - (settlementData.scoreBreakdown.cluePeekPenalty || 0) }} 分</strong>
                 </div>
                 <div class="b-row cap-row" v-if="settlementData.scaffoldCapTriggered">
                   <span>小抄使用封顶规则：</span>
                   <strong class="color-warning">触发封顶 (得分压制至 75 分)</strong>
-                </div>
-                <div class="b-row total-row">
-                  <span>最终总折服度：</span>
-                  <strong class="highlight-score">{{ settlementData.finalScore }} / 100</strong>
                 </div>
               </div>
             </div>
@@ -502,151 +607,218 @@
           </div>
         </div>
 
-        <!-- 战术行动区：二周目未接听时收起为紧凑待机条；接听后展示卡牌/Speak模式 -->
-        <div class="tactical-action-dock" v-if="!isCompleted">
-          <div v-if="runMode === 'ng_plus' && !ngCallStarted" class="ng-awaiting-call-dock">
-            <span>📵 午夜来电尚未接听 — 请先点击上方【🎧 点击接听并开始盲听】听清第 1 句后再开口或输入</span>
-            <button class="btn-start-blind-mini" @click="startNgPlusCall">🎧 立即接听</button>
+      <!-- 5. 近景：前台红木大理石柜台与台面道具 (Mahogany Counter) -->
+      <div class="f2f-counter-foreground">
+        <!-- 柜台台面木纹饰条与金线 -->
+        <div class="counter-rim">
+          <div class="counter-gold-bevel"></div>
+          <div class="counter-accessories">
+            <div class="desk-item bell-item" title="前台黄铜服务铃">
+              <span class="desk-icon">🛎️</span>
+              <span class="desk-item-label">CONCIERGE</span>
+            </div>
+            <div class="desk-item folio-item" @click="showDossierModal = true" title="点击查阅特工机密简报与 Arthur 软肋">
+              <span class="desk-icon">📋</span>
+              <span class="desk-item-label">GUEST REGISTER & INTEL</span>
+            </div>
+            <div class="desk-item terminal-item">
+              <span class="terminal-led">● ONLINE</span>
+              <span class="desk-item-label">KEYCARD TERMINAL</span>
+            </div>
           </div>
-          <template v-else>
-          <!-- 回合与阶段指示条 -->
-          <div class="dock-control-header">
-            <div class="dch-left">
-              <span class="round-badge">第 {{ Math.min(3, currentRound + 1) }} / 3 回合</span>
-              <span class="phase-badge">{{ currentRoundMeta.phaseTitle }}</span>
-              <span class="phase-hint-text">{{ currentRoundMeta.phaseHint }}</span>
-            </div>
-            <div class="dch-right">
-              <div class="mode-switcher-pills">
-                <button
-                  class="mode-pill-btn"
-                  :class="{ active: inputMode === 'cards' }"
-                  @click="inputMode = 'cards'"
-                >
-                  🎴 战术卡牌
-                </button>
-                <button
-                  class="mode-pill-btn"
-                  :class="{ active: inputMode === 'speak' }"
-                  @click="inputMode = 'speak'"
-                >
-                  🎙️ Speak 自由
-                </button>
-              </div>
-            </div>
+        </div>
+
+        <!-- 战术行动操作坞 (直接置于柜台台面上，大气宽敞不拥挤) -->
+        <div class="f2f-action-dock" v-if="!isCompleted">
+          <!-- 二周目未接听待机态 -->
+          <div v-if="runMode === 'ng_plus' && !ngCallStarted" class="ng-awaiting-call-dock">
+            <span>📵 午夜来电尚未接听 — 请先点击右侧接听按钮听清第 1 句来电</span>
+            <button class="btn-start-blind-mini" @click="startNgPlusCall">🎧 立即接听并播放</button>
           </div>
 
-          <!-- 模式一：三色战术手牌模式 (默认) -->
-          <div v-if="inputMode === 'cards'" class="cards-mode-view">
-            <div class="tactical-hand-row">
-              <div
-                v-for="card in currentRoundCards"
-                :key="card.id"
-                class="tactical-card"
-                :class="[`card-${card.color}`, { 'card-loading': loading }]"
-                @click="handlePlayCard(card)"
-              >
-                <div class="tc-header">
-                  <span class="tc-tag" :class="`tag-${card.color}`">{{ card.tag }}</span>
-                  <strong class="tc-title">{{ card.title }}</strong>
-                </div>
-                <div class="tc-body">
-                  <p class="tc-english">"{{ card.english }}"</p>
-                </div>
-                <div class="tc-footer">
-                  <span class="tc-effect">{{ card.effect }}</span>
-                  <button class="btn-play-card" :disabled="loading">
-                    ⚡ 出牌 ↵
+          <template v-else>
+            <!-- 阶段导航与模式切换条 -->
+            <div class="dock-control-header">
+              <div class="dch-left">
+                <span class="round-badge">第 {{ Math.min(3, currentRound + 1) }} / 3 回合</span>
+                <span class="phase-badge">{{ currentRoundMeta.phaseTitle }}</span>
+                <span class="phase-hint-text">{{ currentRoundMeta.phaseHint }}</span>
+              </div>
+              <div class="dch-right">
+                <div class="mode-switcher-pills">
+                  <button
+                    class="mode-pill-btn"
+                    :class="{ active: inputMode === 'cards' }"
+                    @click="inputMode = 'cards'"
+                  >
+                    🎴 战术卡牌
+                  </button>
+                  <button
+                    class="mode-pill-btn"
+                    :class="{ active: inputMode === 'speak' }"
+                    @click="inputMode = 'speak'"
+                  >
+                    🎙️ Speak 自由
                   </button>
                 </div>
               </div>
             </div>
-          </div>
 
-          <!-- 模式二：Speak / 自由输入模式 -->
-          <div v-else class="speak-mode-view">
-            <!-- 灵感提示折叠条 -->
-            <div class="speak-hints-bar">
-              <span class="sh-title">💡 本回合战术灵感：</span>
-              <div class="sh-chips">
-                <span
+            <!-- 卡牌模式：三张战术手牌整齐陈列在柜台台面 -->
+            <div v-if="inputMode === 'cards'" class="cards-mode-view">
+              <div class="tactical-hand-row">
+                <div
                   v-for="card in currentRoundCards"
                   :key="card.id"
-                  class="sh-chip"
-                  :class="`sh-${card.color}`"
-                  @click="userInput = card.english"
-                  :title="`点击采纳此句参考: ${card.english}`"
+                  class="tactical-card"
+                  :class="[`card-${card.color}`, { 'card-loading': loading }]"
+                  @click="handlePlayCard(card)"
                 >
-                  {{ card.tag }}: {{ card.title }}
-                </span>
+                  <div class="tc-header">
+                    <span class="tc-tag" :class="`tag-${card.color}`">{{ card.tag }}</span>
+                    <strong class="tc-title">{{ card.title }}</strong>
+                  </div>
+                  <div class="tc-body">
+                    <p class="tc-english">"{{ card.english }}"</p>
+                  </div>
+                  <div class="tc-footer">
+                    <span class="tc-effect">{{ card.effect }}</span>
+                    <button class="btn-play-card" :disabled="loading">
+                      ⚡ 出牌 ↵
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <!-- Gemini 原生多模态语音录入区 -->
-            <div class="voice-recorder-bar">
-              <div v-if="!isRecording" class="voice-ready-row">
-                <button
-                  class="btn-voice-rec"
-                  @click="startVoiceRecording"
+            <!-- Speak 自由模式：脱稿开麦与键盘交涉 -->
+            <div v-else class="speak-mode-view">
+              <!-- 战术灵感药丸 -->
+              <div class="speak-hints-bar">
+                <span class="sh-title">💡 战术灵感：</span>
+                <div class="sh-chips">
+                  <span
+                    v-for="card in currentRoundCards"
+                    :key="card.id"
+                    class="sh-chip"
+                    :class="`sh-${card.color}`"
+                    @click="userInput = card.english"
+                    :title="`采纳: ${card.english}`"
+                  >
+                    {{ card.tag }}: {{ card.title }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- 录音条 -->
+              <div class="voice-recorder-bar">
+                <div v-if="!isRecording" class="voice-ready-row">
+                  <button
+                    class="btn-voice-rec"
+                    @click="startVoiceRecording"
+                    :disabled="loading"
+                    title="开麦直接说英文"
+                  >
+                    <span class="rec-icon">🎙️</span>
+                    <span class="rec-title">脱稿开麦 · 直接说英文对白</span>
+                    <span class="rec-model-chip">Gemini 多模态直听</span>
+                  </button>
+                  <span class="voice-tip-text">或在下方输入框打字交涉 ↵</span>
+                </div>
+
+                <div v-else class="voice-recording-row">
+                  <div class="recording-indicator">
+                    <span class="pulsing-live-dot"></span>
+                    <span class="rec-status-text">正在录制英文发音...</span>
+                    <span class="rec-timer">{{ formatDuration(recordingDuration) }}</span>
+                  </div>
+                  <div class="rec-btn-group">
+                    <button class="btn-rec-cancel" @click="cancelVoiceRecording">
+                      ✕ 放弃重录
+                    </button>
+                    <button class="btn-rec-submit" @click="stopAndSendVoiceRecording">
+                      ⏹️ 停止并直接交涉
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 输入行 -->
+              <div class="speak-input-row" v-if="!isRecording">
+                <textarea
+                  ref="textareaRef"
+                  v-model="userInput"
+                  placeholder="键入你的英文交涉对白（可直接点击上方战术灵感填入参考，或点击上方开麦直接说话）..."
+                  rows="2"
+                  @keydown.enter.prevent="sendMessage"
                   :disabled="loading"
-                  title="使用麦克风直接说英语，Gemini 将直接理解你的发音、语用与礼貌度！"
+                ></textarea>
+                <button
+                  class="btn-send-speak"
+                  @click="sendMessage"
+                  :disabled="!userInput.trim() || loading"
                 >
-                  <span class="rec-icon">🎙️</span>
-                  <span class="rec-title">脱稿开麦 · 直接说英文对白</span>
-                  <span class="rec-model-chip">Gemini 多模态直听</span>
+                  发送交涉 ↵
                 </button>
-                <span class="voice-tip-text">或在下方键盘打字输入交涉 ↵</span>
-              </div>
-
-              <!-- 正在录音交互态 -->
-              <div v-else class="voice-recording-row">
-                <div class="recording-indicator">
-                  <span class="pulsing-live-dot"></span>
-                  <span class="rec-status-text">正在录制英文发音...</span>
-                  <span class="rec-timer">{{ formatDuration(recordingDuration) }}</span>
-                </div>
-                <div class="rec-btn-group">
-                  <button class="btn-rec-cancel" @click="cancelVoiceRecording">
-                    ✕ 放弃重录
-                  </button>
-                  <button class="btn-rec-submit" @click="stopAndSendVoiceRecording">
-                    ⏹️ 停止并直接交涉
-                  </button>
-                </div>
               </div>
             </div>
-
-            <!-- 输入行 -->
-            <div class="speak-input-row" v-if="!isRecording">
-              <textarea
-                ref="textareaRef"
-                v-model="userInput"
-                placeholder="键入你的英文交涉对白（可直接点击上方战术灵感填入参考，或点击上方开麦直接说话）..."
-                rows="2"
-                @keydown.enter.prevent="sendMessage"
-                :disabled="loading"
-              ></textarea>
-              <button
-                class="btn-send-speak"
-                @click="sendMessage"
-                :disabled="!userInput.trim() || loading"
-              >
-                发送交涉 ↵
-              </button>
-            </div>
-          </div>
           </template>
         </div>
 
+        <!-- 结案锁定条 -->
         <div v-else class="completed-lock-panel">
           <span class="lock-icon">🔒</span>
           <div class="lock-text">
-            <strong>本次酒店交涉已结案落幕！</strong>
-            <p>已生成真实结案账单与学情金句。可点击上方结案账单中的“再次演练”尝试不同对策！</p>
+            <strong>本次酒店交涉已结案！</strong>
+            <p>已生成真实结案账单。可点击中央账单中的“再次演练”重新挑战！</p>
           </div>
           <button class="btn-primary" @click="resetSession">🔄 重新演练本场景</button>
         </div>
-      </section>
+      </div>
+
+      <!-- 6. 历史交涉全流程记录抽屉 (点击 📜 历史 时从侧边滑出) -->
+      <div v-if="showHistoryDrawer" class="history-drawer-overlay" @click.self="showHistoryDrawer = false">
+        <div class="history-drawer-card">
+          <div class="hdc-header">
+            <div class="hdc-title-group">
+              <span class="hdc-icon">📜</span>
+              <h3>交涉历史全景对白</h3>
+              <small>共 {{ messages.length + 1 }} 条记录</small>
+            </div>
+            <button class="btn-close-hdc" @click="showHistoryDrawer = false">✕</button>
+          </div>
+          <div class="hdc-body">
+            <!-- 开场白 -->
+            <div class="hdc-row hdc-npc">
+              <div class="hdc-speaker-badge">👔 {{ scenarioData.npc.name }} (开场)</div>
+              <p class="hdc-text">"{{ scenarioData.openingLine }}"</p>
+            </div>
+            <!-- 每轮交涉记录 -->
+            <div
+              v-for="(m, i) in messages"
+              :key="i"
+              class="hdc-row"
+              :class="m.role === 'user' ? 'hdc-user' : 'hdc-npc'"
+            >
+              <div class="hdc-speaker-badge">
+                {{ m.role === 'user' ? '👤 You (第 ' + (Math.floor(i / 2) + 1) + ' 回合)' : '👔 ' + scenarioData.npc.name }}
+              </div>
+              <p class="hdc-text">"{{ m.content }}"</p>
+              <div v-if="m.evaluation" class="hdc-eval-strip">
+                <span v-if="m.evaluation.stanceIdentified" class="eval-mini-pill pill-ok">
+                  ⚡ {{ m.evaluation.stanceIdentified }}
+                </span>
+                <span v-if="m.evaluation.politenessScore" class="eval-mini-pill pill-tone">
+                  🎩 礼貌 {{ m.evaluation.politenessScore }}/30
+                </span>
+                <span v-if="m.evaluation.pacingPenalty" class="eval-mini-pill pill-warn">
+                  ⚠️ 操之过急 -{{ m.evaluation.pacingPenalty }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </main>
 
     <!-- 偷看整句示范与小抄警示弹窗 (Peek Modal) -->
@@ -766,8 +938,52 @@ const isSynced = ref(false);
 const isSyncingDeck = ref(false);
 const syncFeedback = ref<{ message: string; words: string[]; requiresLogin?: boolean } | null>(null);
 const showDossierModal = ref(false);
+const showContextDetails = ref(false);
+const showBreakdownDetails = ref(false);
 const chatViewportRef = ref<HTMLElement | null>(null);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
+
+const currentStatusPrompt = computed(() => {
+  const npcName = scenarioData.value?.npc?.name || 'Arthur';
+  if (currentEmotion.value === 'pleased') {
+    return `${npcName} 神情舒展，对你的得体沟通颇有好感`;
+  }
+  if (currentEmotion.value === 'annoyed') {
+    return `${npcName} 眉头微皱，感到被冒犯或按规程遇阻`;
+  }
+  if (currentEmotion.value === 'skeptical') {
+    return `${npcName} 目光警惕，正在核对终端与查验证件`;
+  }
+  return `${npcName} 严苛审视，正按夜班规程与你核实`;
+});
+
+const showHistoryDrawer = ref(false);
+
+const latestNpcMessage = computed(() => {
+  for (let i = messages.value.length - 1; i >= 0; i--) {
+    if (messages.value[i].role === 'assistant') {
+      return {
+        key: `msg_${i}`,
+        content: messages.value[i].content,
+        audio: messages.value[i].audio
+      };
+    }
+  }
+  return {
+    key: 'opening',
+    content: scenarioData.value?.openingLine || '',
+    audio: undefined
+  };
+});
+
+const latestUserMessage = computed(() => {
+  for (let i = messages.value.length - 1; i >= 0; i--) {
+    if (messages.value[i].role === 'user') {
+      return messages.value[i];
+    }
+  }
+  return null;
+});
 
 // 小抄与战术语块状态
 const usedFullScaffold = ref(false);
@@ -1702,76 +1918,181 @@ onMounted(async () => {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-/* 顶部状态栏 */
+/* 顶部导航控制条 (Sleek Command Strip) */
 .top-nav {
-  min-height: 54px;
-  height: auto;
-  background: #0f172a;
-  border-bottom: 1px solid #1e293b;
+  min-height: 48px;
+  background: #0d1527;
+  border-bottom: 1px solid #1e2d4d;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 14px;
-  padding: 8px 20px;
+  gap: 12px;
+  padding: 8px 18px;
+  box-sizing: border-box;
 }
-.nav-brand {
+
+.nav-left {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  min-width: 0;
 }
-.badge-tag {
-  background: #1e3a5f;
+
+.btn-back-module {
+  background: rgba(30, 41, 59, 0.85);
+  color: #cbd5e1;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+.btn-back-module:hover {
+  background: #1e293b;
   color: #38bdf8;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 4px;
-  text-transform: uppercase;
+  border-color: #38bdf8;
 }
-.nav-brand h1 {
-  font-size: 17px;
-  font-weight: 700;
-  color: #f8fafc;
-  margin: 0;
-}
-.nav-status {
+
+.nav-title-group, .scene-title-group {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 8px;
+  min-width: 0;
 }
-.status-pill {
-  background: #1e293b;
-  padding: 4px 12px;
-  border-radius: 20px;
-  display: flex;
-  gap: 6px;
-  font-size: 13px;
-}
-.status-pill .label {
-  color: #94a3b8;
-}
-.status-pill .val {
+
+.nav-title-group h1, .scene-main-title {
+  margin: 0;
+  font-size: 14.5px;
   font-weight: 700;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scene-location-chip {
+  background: rgba(56, 189, 248, 0.12);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+/* 居中分段模式切换器 */
+.nav-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.run-mode-segmented {
+  display: inline-flex;
+  background: #090e17;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.seg-btn, .seg-item {
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.seg-btn:hover:not(:disabled), .seg-item:hover:not(:disabled) {
+  color: #f1f5f9;
+}
+
+.seg-btn.active, .seg-item.active {
+  background: #1e3a5f;
+  color: #38bdf8;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.seg-btn.ng-seg-btn.active, .seg-item.seg-ng.active {
+  background: linear-gradient(135deg, #92400e 0%, #d97706 100%);
+  color: #fef3c7;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.35);
+}
+
+/* 右侧指示与操作按钮 */
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.nav-round-badge {
+  background: #111b33;
+  border: 1px solid #1e3a5f;
+  color: #7dd3fc;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.nav-score-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+.nav-score-badge.score-penthouse {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #34d399;
+}
+.nav-score-badge.score-standard {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.4);
   color: #38bdf8;
 }
-.score-pill.score-penthouse .val { color: #10b981; }
-.score-pill.score-standard .val { color: #38bdf8; }
-.score-pill.score-risk .val { color: #f59e0b; }
+.nav-score-badge.score-risk {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+}
 
-.mode-pill.mode-pill-cheat {
-  border: 1px solid rgba(245, 158, 11, 0.4);
+.nav-icon-btn {
+  background: #111b33;
+  border: 1px solid #233457;
+  color: #cbd5e1;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
-.mode-pill.mode-pill-cheat .val {
-  color: #f59e0b;
+.nav-icon-btn:hover:not(:disabled) {
+  background: #1e293b;
+  border-color: #38bdf8;
+  color: #f8fafc;
 }
-.mode-pill.mode-pill-pro {
-  border: 1px solid rgba(16, 185, 129, 0.4);
-}
-.mode-pill.mode-pill-pro .val {
-  color: #10b981;
+.nav-icon-btn.btn-tts-icon.active {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #34d399;
 }
 
 .btn-ghost {
@@ -1787,40 +2108,6 @@ onMounted(async () => {
 .btn-ghost:hover {
   background: #1e293b;
   border-color: #64748b;
-}
-
-/* Gemini 3.8 Flash-Lite TTS 语音总开关按钮 */
-.btn-tts-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(30, 41, 59, 0.7);
-  border: 1px solid #334155;
-  color: #94a3b8;
-  padding: 5px 12px;
-  border-radius: 20px;
-  cursor: pointer;
-  font-size: 13px;
-  transition: all 0.25s ease;
-}
-.btn-tts-toggle:hover {
-  border-color: #64748b;
-  color: #cbd5e1;
-}
-.btn-tts-toggle.tts-active {
-  background: rgba(16, 185, 129, 0.15);
-  border-color: #10b981;
-  color: #34d399;
-  box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);
-}
-.tts-model-chip {
-  background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #38bdf8;
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 10px;
-  font-weight: 600;
 }
 
 /* 对白框头部与 TTS 播放按钮 */
@@ -1880,338 +2167,609 @@ onMounted(async () => {
   50% { box-shadow: 0 0 0 4px rgba(16, 185, 129, 0); }
 }
 
-/* 主体布局 */
-.main-layout {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 350px 1fr;
-  max-width: 1400px;
+/* 面对面第一人称 AVG 剧场舞台 (Face-to-Face AVG Stage) */
+.f2f-stage {
+  position: relative;
   width: 100%;
-  margin: 0 auto;
-  padding: 14px 20px;
-  gap: 18px;
-  box-sizing: border-box;
+  height: calc(100vh - 48px);
+  min-height: 560px;
+  overflow: hidden;
+  background: #070b14;
+  user-select: none;
 }
 
-/* 左侧栏 */
-.npc-sidebar {
+/* 1. 远景：伦敦豪华酒店午夜大堂矢量背景 */
+.f2f-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.hotel-backdrop-svg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 中近景人物与对白联动舞台 (The Actor Stage: 居中聚焦，固定紧邻，永不拉远漂移) */
+.f2f-actor-stage {
+  position: absolute;
+  top: 0;
+  bottom: 165px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 1140px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 0 24px;
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* 2. Arthur 矢量半身立绘 (位于画面左侧偏中，底部坐落在柜台后) */
+.f2f-character-layer {
+  align-self: flex-end;
+  width: 380px;
+  max-width: 38vw;
+  flex-shrink: 0;
+  margin-right: -32px; /* 抵消SVG右侧透明留白，让气泡尾巴直抵 Arthur 右肩 */
+  pointer-events: none;
+  transition: transform 0.3s ease;
+}
+.character-sprite-container {
+  position: relative;
+  width: 100%;
+}
+.arthur-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.75));
+}
+.character-glow-aura {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 70%;
+  height: 60%;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.15) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* 3. 悬浮语音气泡 (Floating Dialogue Balloon: 紧依 Arthur 头部右侧，永远保持紧凑) */
+.f2f-speech-balloon {
+  flex: 1;
+  max-width: 660px;
+  min-width: 320px;
+  margin-top: clamp(20px, 4.5vh, 48px);
+  position: relative;
+  pointer-events: auto;
+  background: rgba(13, 21, 39, 0.94);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1.5px solid rgba(56, 189, 248, 0.35);
+  border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 25px rgba(56, 189, 248, 0.12);
+  padding: 16px 20px;
+  box-sizing: border-box;
+  color: #f8fafc;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.f2f-speech-balloon.speaking {
+  border-color: #10b981;
+  box-shadow: 0 16px 45px rgba(0, 0, 0, 0.7), 0 0 30px rgba(16, 185, 129, 0.28);
+}
+.f2f-speech-balloon.masked {
+  border-color: rgba(245, 158, 11, 0.45);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 25px rgba(245, 158, 11, 0.15);
+}
+
+/* 指向 Arthur 右肩的气泡三角小尾巴 */
+.balloon-tail {
+  position: absolute;
+  left: -18px;
+  top: 38px;
+  width: 0;
+  height: 0;
+  border-top: 10px solid transparent;
+  border-bottom: 10px solid transparent;
+  border-right: 18px solid rgba(13, 21, 39, 0.94);
+}
+
+/* 气泡顶栏 */
+.balloon-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 10px;
+}
+.speaker-tag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.speaker-avatar-icon {
+  font-size: 20px;
+}
+.speaker-name-group {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+}
+.speaker-name-group strong {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.2;
+}
+.speaker-name-group small {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #38bdf8;
+  letter-spacing: 0.5px;
+}
+.emotion-micro-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.emotion-micro-badge.neutral {
+  background: rgba(56, 189, 248, 0.15);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+}
+.emotion-micro-badge.skeptical {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+.emotion-micro-badge.annoyed {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+.emotion-micro-badge.pleased {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
 }
 
-.npc-card {
-  background: #0f172a;
-  border: 1px solid #1e293b;
-  border-radius: 12px;
-  padding: 16px;
+.balloon-header-actions {
   display: flex;
-  gap: 16px;
+  align-items: center;
+  gap: 8px;
+}
+.btn-history-toggle {
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px solid #334155;
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
   align-items: center;
 }
-.avatar-box {
-  position: relative;
+.btn-history-toggle:hover {
+  background: #1e293b;
+  border-color: #38bdf8;
+  color: #38bdf8;
 }
-.avatar-placeholder {
-  width: 72px;
-  height: 72px;
-  background: #1e3a5f;
+
+/* Arthur 心境提示微标 */
+.balloon-status-hint {
+  font-size: 11.5px;
+  color: #94a3b8;
+  margin-bottom: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border-left: 2px solid #38bdf8;
+}
+
+/* 台词文字 */
+.balloon-speech-content {
+  min-height: 48px;
+}
+.npc-speech-p {
+  margin: 0;
+  font-size: 16.5px;
+  line-height: 1.55;
+  color: #f1f5f9;
+  font-family: Georgia, Cambria, "Times New Roman", serif;
+  letter-spacing: 0.2px;
+}
+
+/* 玩家上一句对白的回声条 (Echo) */
+.balloon-user-echo {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.echo-speaker {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+}
+.echo-text {
+  font-size: 13px;
+  color: #cbd5e1;
+  font-style: italic;
+  line-height: 1.4;
+}
+.echo-eval-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+/* 正在思考权衡条 */
+.balloon-thinking-strip {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #38bdf8;
+}
+.balloon-thinking-strip .dot {
+  width: 6px;
+  height: 6px;
+  background: #38bdf8;
   border-radius: 50%;
+  animation: pulse-dot 1.2s infinite ease-in-out;
+}
+.balloon-thinking-strip .dot:nth-child(2) { animation-delay: 0.2s; }
+.balloon-thinking-strip .dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes pulse-dot {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1.1); opacity: 1; }
+}
+
+/* 盲听状态条 (NG+) */
+.balloon-blind-content {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.blind-wave-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(245, 158, 11, 0.08);
+  transition: background 0.2s;
+}
+.blind-wave-row:hover {
+  background: rgba(245, 158, 11, 0.16);
+}
+.blind-phone-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.blind-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 20px;
+}
+.blind-bars span {
+  width: 3px;
+  height: 6px;
+  background: #f59e0b;
+  border-radius: 2px;
+}
+.blind-bars.animating span {
+  animation: barWave 0.8s infinite ease-in-out alternate;
+}
+.blind-bars.animating span:nth-child(2) { animation-delay: 0.1s; height: 14px; }
+.blind-bars.animating span:nth-child(3) { animation-delay: 0.2s; height: 18px; }
+.blind-bars.animating span:nth-child(4) { animation-delay: 0.3s; height: 12px; }
+.blind-bars.animating span:nth-child(5) { animation-delay: 0.15s; height: 16px; }
+.blind-bars.animating span:nth-child(6) { animation-delay: 0.25s; height: 8px; }
+.blind-bars.animating span:nth-child(7) { animation-delay: 0.35s; height: 15px; }
+.blind-bars.animating span:nth-child(8) { animation-delay: 0.05s; height: 10px; }
+@keyframes barWave {
+  0% { transform: scaleY(0.4); }
+  100% { transform: scaleY(1.4); }
+}
+.blind-prompt-text {
+  font-size: 12px;
+  color: #fde68a;
+  font-weight: 600;
+}
+.blind-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.btn-reveal-subtitle {
+  background: rgba(30, 41, 59, 0.8);
+  color: #94a3b8;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-reveal-subtitle:hover {
+  background: #1e293b;
+  color: #f8fafc;
+  border-color: #64748b;
+}
+
+/* 4. 浮动结算账单容器 (覆盖在中景大堂上) */
+.settlement-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: rgba(4, 7, 14, 0.82);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid #38bdf8;
+  padding: 20px;
+  overflow-y: auto;
 }
-.avatar-placeholder.skeptical { border-color: #f59e0b; }
-.avatar-placeholder.annoyed { border-color: #ef4444; }
-.avatar-placeholder.pleased { border-color: #10b981; }
+.settlement-overlay .receipt-stage-card {
+  max-width: 620px;
+  width: 100%;
+  margin: auto;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 35px rgba(56, 189, 248, 0.2);
+}
 
-.avatar-icon {
-  font-size: 32px;
-}
-.emotion-badge {
+/* 5. 近景：前台红木大理石柜台与台面道具 (Mahogany Counter) */
+.f2f-counter-foreground {
   position: absolute;
-  bottom: -4px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #0284c7;
-  color: #fff;
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 10px;
-  white-space: nowrap;
-}
-.npc-info h2 {
-  margin: 0 0 4px 0;
-  font-size: 16px;
-  color: #f8fafc;
-}
-.npc-title {
-  font-size: 11px;
-  color: #38bdf8;
-  display: block;
-  margin-bottom: 6px;
-}
-.npc-persona {
-  font-size: 12px;
-  color: #94a3b8;
-  line-height: 1.4;
-  margin: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 4;
+  background: linear-gradient(180deg, #1b0e07 0%, #0d0704 30%, #050302 100%);
+  border-top: 2px solid #d97706;
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.85);
+  padding: 8px 24px 14px 24px;
+  box-sizing: border-box;
 }
 
-/* 确定性破防天平卡片 */
-.tracker-card {
-  background: #0f172a;
-  border: 1px solid #1e293b;
-  border-radius: 12px;
-  padding: 16px;
-}
-.card-header {
+/* 柜台边缘与陈列道具条 */
+.counter-rim {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(217, 119, 6, 0.2);
+  padding-bottom: 6px;
+  margin-bottom: 8px;
 }
-.card-header h3 {
-  font-size: 13px;
-  margin: 0;
-  color: #cbd5e1;
-  flex: 1;
-  margin-left: 6px;
-}
-.meter-status-tag {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-weight: 700;
-}
-.meter-status-tag.score-penthouse { background: rgba(16, 185, 129, 0.2); color: #10b981; }
-.meter-status-tag.score-standard { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
-.meter-status-tag.score-risk { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
-
-.meter-bar-container {
-  margin-bottom: 14px;
-}
-.meter-bar-track {
-  height: 16px;
-  background: #1e293b;
-  border-radius: 8px;
-  position: relative;
-  overflow: hidden;
-  margin-bottom: 6px;
-}
-.meter-bar-fill {
-  height: 100%;
-  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.meter-bar-fill.score-penthouse { background: linear-gradient(90deg, #10b981, #34d399); }
-.meter-bar-fill.score-standard { background: linear-gradient(90deg, #0284c7, #38bdf8); }
-.meter-bar-fill.score-risk { background: linear-gradient(90deg, #d97706, #fbbf24); }
-
-.marker {
+.counter-gold-bevel {
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, #d97706 50%, transparent 100%);
   position: absolute;
   top: 0;
-  bottom: 0;
-  width: 2px;
-  background: rgba(255, 255, 255, 0.4);
+  left: 0;
+  right: 0;
 }
-.marker-standard { left: 65%; }
-.marker-penthouse { left: 85%; }
-.marker-label {
-  position: absolute;
-  top: -18px;
-  transform: translateX(-50%);
-  font-size: 9px;
-  color: #64748b;
-}
-
-.meter-score-text {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-}
-.current-score {
-  font-size: 24px;
-  font-weight: 800;
-  color: #f8fafc;
-}
-.total-score {
-  font-size: 11px;
-  color: #64748b;
-}
-
-.rubric-breakdown {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  border-top: 1px dashed #1e293b;
-  padding-top: 10px;
-}
-.rubric-item {
+.counter-accessories {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: #64748b;
+  gap: 16px;
 }
-.rubric-item.achieved {
-  color: #38bdf8;
-  font-weight: 600;
-}
-
-/* 情境卡片 */
-.context-card {
-  background: #0f172a;
-  border: 1px solid #1e293b;
-  border-radius: 12px;
-  padding: 16px;
-}
-.context-item {
-  margin-bottom: 10px;
-  font-size: 12px;
-}
-.context-item .label {
-  color: #64748b;
-  display: block;
-  margin-bottom: 2px;
-}
-.context-item p {
-  margin: 0;
-  color: #94a3b8;
-  line-height: 1.4;
-}
-.soft-spot {
-  color: #f59e0b !important;
-}
-
-/* 右栏：舞台 */
-.stage-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  height: calc(100vh - 155px);
-  min-height: 500px;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-
-.objective-banner {
-  flex-shrink: 0;
-  background: #0f172a;
-  border: 1px solid #1e293b;
-  border-radius: 10px;
-  padding: 8px 14px;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
+.desk-item {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fde68a;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(217, 119, 6, 0.3);
+  border-radius: 6px;
+  padding: 3px 9px;
+  user-select: none;
 }
-.objective-top-row {
+.desk-item.folio-item {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.desk-item.folio-item:hover {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: #fbbf24;
+  transform: translateY(-1px);
+}
+.terminal-led {
+  color: #34d399;
+  font-size: 9.5px;
+  font-weight: 800;
+}
+.desk-item-label {
+  letter-spacing: 0.5px;
+}
+
+/* 战术操作坞 (置于柜台台面) */
+.f2f-action-dock {
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+/* 结案锁定条 */
+.completed-lock-panel {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 16px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: 8px;
+  padding: 8px 16px;
 }
-.target-flag {
-  background: #1e3a5f;
-  color: #38bdf8;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 4px;
-  white-space: nowrap;
+.completed-lock-panel .lock-icon {
+  font-size: 20px;
 }
-.objective-banner p.objective-text {
-  margin: 0;
-  font-size: 12.5px;
-  color: #cbd5e1;
-  flex: 1;
-  min-width: 200px;
-  line-height: 1.4;
+.completed-lock-panel .lock-text strong {
+  color: #34d399;
+  font-size: 13.5px;
+  display: block;
 }
-.pacing-pill {
+.completed-lock-panel .lock-text p {
+  margin: 2px 0 0 0;
+  font-size: 11.5px;
+  color: #94a3b8;
+}
+
+/* 6. 历史记录全景抽屉 */
+.history-drawer-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  justify-content: flex-end;
+}
+.history-drawer-card {
+  width: 480px;
+  max-width: 90vw;
+  height: 100%;
+  background: #090e1a;
+  border-left: 1px solid #1e293b;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -10px 0 35px rgba(0, 0, 0, 0.7);
+  animation: slideDrawer 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes slideDrawer {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+.hdc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid #1e293b;
+  background: #0d1527;
+}
+.hdc-title-group {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
-  background: #1e293b;
-  padding: 4px 10px;
-  border-radius: 6px;
 }
-.pacing-badge {
-  font-size: 11px;
-  font-weight: 700;
-  color: #f59e0b;
-  white-space: nowrap;
-}
-.pacing-hint {
-  font-size: 11px;
-  color: #94a3b8;
-}
-
-/* 对话视窗 */
-.chat-viewport {
-  flex: 1;
-  min-height: 240px;
-  background: #0f172a;
-  border: 1px solid #1e293b;
-  border-radius: 12px;
-  padding: 16px 20px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.chat-row {
-  display: flex;
-}
-.npc-row { justify-content: flex-start; }
-.user-row { justify-content: flex-end; }
-
-.bubble {
-  max-width: 75%;
-  border-radius: 12px;
-  padding: 12px 16px;
-}
-.npc-bubble {
-  background: #1e293b;
-  border: 1px solid #334155;
-}
-.user-bubble {
-  background: #1e3a5f;
-  border: 1px solid #0284c7;
-}
-.speaker {
-  font-size: 11px;
-  font-weight: 700;
-  color: #94a3b8;
-  display: block;
-  margin-bottom: 4px;
-}
-.speech-text {
+.hdc-title-group h3 {
   margin: 0;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 15px;
+  font-weight: 700;
   color: #f8fafc;
 }
-
-.eval-card {
-  margin-top: 8px;
-  border-top: 1px dashed rgba(255, 255, 255, 0.1);
-  padding-top: 6px;
-}
-.eval-chips {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.chip {
+.hdc-title-group small {
   font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 4px;
+  color: #64748b;
 }
-.chip-success { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+.btn-close-hdc {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+}
+.btn-close-hdc:hover {
+  color: #f8fafc;
+}
+.hdc-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.hdc-row {
+  padding: 10px 14px;
+  border-radius: 8px;
+}
+.hdc-npc {
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid #1e293b;
+  align-self: flex-start;
+  width: 90%;
+}
+.hdc-user {
+  background: rgba(14, 116, 144, 0.15);
+  border: 1px solid rgba(14, 116, 144, 0.35);
+  align-self: flex-end;
+  width: 90%;
+}
+.hdc-speaker-badge {
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.hdc-npc .hdc-speaker-badge { color: #38bdf8; }
+.hdc-user .hdc-speaker-badge { color: #22d3ee; }
+.hdc-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #f1f5f9;
+  font-family: Georgia, Cambria, serif;
+}
+.hdc-eval-strip {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+/* 对话微标签 (Micro-pills) */
+.eval-mini-strip {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
+}
+.eval-mini-pill {
+  font-size: 10.5px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.pill-ok {
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+}
+.pill-tone {
+  background: rgba(14, 165, 233, 0.15);
+  color: #7dd3fc;
+}
+.pill-warn {
+  background: rgba(239, 68, 68, 0.18);
+  color: #f87171;
+}
 .chip-danger { background: rgba(239, 68, 68, 0.2); color: #f87171; }
 .tone-chip { background: #0f172a; color: #94a3b8; border: 1px solid #334155; }
 
@@ -2312,20 +2870,58 @@ onMounted(async () => {
 
 .receipt-breakdown {
   background: #0f172a;
+  border: 1px solid #1e293b;
   border-radius: 8px;
-  padding: 14px;
-  margin: 16px 0;
+  padding: 10px 14px;
+  margin: 14px 0;
+}
+.breakdown-head-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+.bh-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .breakdown-title {
   font-size: 12px;
   font-weight: 700;
   color: #cbd5e1;
-  margin-bottom: 8px;
+}
+.breakdown-score-badge {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #34d399;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.btn-toggle-breakdown {
+  background: transparent;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-toggle-breakdown:hover {
+  color: #38bdf8;
+  border-color: #38bdf8;
 }
 .breakdown-grid {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
 }
 .b-row {
   display: flex;
@@ -3638,40 +4234,8 @@ onMounted(async () => {
   white-space: nowrap;
 }
 
-@media (max-width: 1024px) {
-  .main-layout {
-    grid-template-columns: 1fr;
-  }
-}
 
-@media (max-height: 820px) {
-  .stage-section {
-    height: auto;
-    min-height: 460px;
-    overflow: visible;
-  }
-  .chat-viewport {
-    min-height: 280px;
-    max-height: 58vh;
-  }
-}
 
-.btn-back-module {
-  background: rgba(30, 41, 59, 0.85);
-  color: #cbd5e1;
-  border: 1px solid #334155;
-  border-radius: 8px;
-  padding: 5px 11px;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-.btn-back-module:hover {
-  background: #1e293b;
-  color: #f8fafc;
-  border-color: #60a5fa;
-}
 
 .priv-persisted-tag {
   display: inline-block;
@@ -3760,5 +4324,52 @@ onMounted(async () => {
 
 .btn-peek-clue:hover {
   background: rgba(245, 158, 11, 0.2);
+}
+
+/* 响应式适配：确保各尺寸屏幕下气泡与人物均紧凑贴合 */
+@media (max-width: 1024px) {
+  .f2f-actor-stage {
+    padding: 0 14px;
+  }
+  .f2f-character-layer {
+    width: 320px;
+    margin-right: -24px;
+  }
+}
+@media (max-width: 768px) {
+  .f2f-character-layer {
+    width: 220px;
+    margin-right: -16px;
+    opacity: 0.9;
+  }
+  .f2f-speech-balloon {
+    min-width: 240px;
+    padding: 12px 14px;
+    margin-top: 15px;
+  }
+  .npc-speech-p {
+    font-size: 14.5px;
+  }
+  .counter-accessories {
+    display: none;
+  }
+}
+@media (max-height: 750px) {
+  .f2f-character-layer {
+    width: 300px;
+  }
+  .f2f-speech-balloon {
+    margin-top: 10px;
+    padding: 12px 16px;
+  }
+  .f2f-counter-foreground {
+    padding: 6px 16px 10px 16px;
+  }
+  .tactical-card {
+    padding: 8px 10px;
+  }
+  .tc-english {
+    font-size: 12.5px;
+  }
 }
 </style>
