@@ -1,5 +1,15 @@
-// 补齐早期用户文档缺失的 role/status/createdAt。
-// 默认只统计不写入；确认后加 --apply 执行。
+/**
+ * 一次性数据迁移：补齐早期用户文档缺失的 role / status / createdAt。
+ *
+ * 背景：Mongoose 的 default 只对“新建文档”生效，历史数据里没有这些字段，
+ * 导致管理端角色/状态显示空白、“正常账号”统计偏少。
+ *
+ * 用法：
+ *   node scripts/migrateLegacyUserFields.js          # 只统计，不写库（默认）
+ *   node scripts/migrateLegacyUserFields.js --apply  # 确认后真正写入
+ *
+ * 脚本是幂等的：重复执行只会处理仍然缺失字段的账号，已经补齐的会跳过。
+ */
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const mongoose = require('mongoose');
@@ -8,7 +18,8 @@ const { dbUrl } = require('../config/serve');
 
 const apply = process.argv.includes('--apply');
 
-// 字段缺失可能是 undefined（字段不存在）、null 或空字符串。
+// 字段缺失可能是三种形式：字段不存在（undefined）、null、空字符串。
+// 三种都视为“需要补齐”，避免漏掉历史脏数据。
 function missingClauses(field) {
     return [
         { [field]: { $exists: false } },
@@ -42,7 +53,8 @@ async function main() {
         const update = {};
         if (!user.role) update.role = 'user';
         if (!user.status) update.status = 'active';
-        // createdAt 缺失时用注册时间回填，保证按注册时间排序正确。
+        // createdAt 缺失时用注册时间 createTime 回填，
+        // 这样管理端按注册时间排序、展示都不会把老账号排到最后。
         if (!user.createdAt && user.createTime) update.createdAt = user.createTime;
 
         if (Object.keys(update).length === 0) {
@@ -53,7 +65,8 @@ async function main() {
 
         console.log(`- ${user.username}: 补齐 ${Object.keys(update).join('、')}`);
         if (apply) {
-            // 关闭 timestamps，避免把 updatedAt 刷成当前时间。
+            // 关闭 timestamps：只补业务字段，不把 updatedAt 刷成当前时间，
+            // 避免迁移动作本身污染用户的更新时间。
             await User.updateOne({ _id: user._id }, { $set: update }, { timestamps: false });
         }
         updated += 1;

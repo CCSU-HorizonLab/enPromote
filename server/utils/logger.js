@@ -54,11 +54,28 @@ if (process.env.NODE_ENV === 'production') {
     logger.remove(winston.transports.Console);
 }
 
-// 创建访问日志的stream
-const accessLogStream = fs.createWriteStream(
-    path.join(logsDir, 'access.log'),
-    { flags: 'a' }
-);
+// 访问日志同样交给 winston 轮转，避免 morgan 直接追加导致文件无限增长。
+// 这里刻意不加时间戳/级别前缀：access.log 必须保持 morgan combined 的原格式，
+// 现有的日志查看和清理逻辑都按这个格式解析。
+const accessLogger = winston.createLogger({
+    level: 'info',
+    format: winston.format.printf(({ message }) => message),
+    transports: [
+        new winston.transports.File({
+            filename: path.join(logsDir, 'access.log'),
+            maxsize: 5242880, // 单文件 5MB
+            maxFiles: 5, // 最多保留 5 份，超出后滚动删除最旧的
+            tailable: true, // 轮转时把 access.log 改名成 access1.log、access2.log……
+            eol: '\n' // 固定用 \n，避免 Windows 的 \r\n 影响按行解析
+        })
+    ]
+});
+
+// morgan 只认标准的可写流，这里把 winston 包一层 write 适配器。
+// morgan 传入的内容自带结尾换行，winston 会再补一个，所以先去掉一个。
+const accessLogStream = {
+    write: (message) => accessLogger.info(String(message).replace(/\r?\n$/, ''))
+};
 
 // 导出logger和stream
 module.exports = {

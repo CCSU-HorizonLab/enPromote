@@ -8,6 +8,7 @@
       </div>
       <div class="heading-actions">
         <router-link class="back-link" to="/admin">用户管理</router-link>
+        <router-link class="back-link" to="/admin/audit">审计日志</router-link>
         <router-link class="back-link" to="/">返回学习平台</router-link>
       </div>
     </section>
@@ -88,12 +89,14 @@ function errorText(error: unknown, fallback = '日志加载失败，请稍后重
 }
 
 // 清理前二次确认，成功后刷新当前日志列表并展示清理条数。
+// 前端校验只是为了少发一次无效请求，真正的边界校验仍在后端。
 async function cleanOldLogs() {
   const days = Number(daysToKeep.value)
   if (!Number.isInteger(days) || days < 1 || days > 365) {
     errorMessage.value = '保留天数必须是 1 到 365 之间的整数'
     return
   }
+  // 删除日志不可恢复，必须让管理员明确确认。
   if (!window.confirm(`确定删除 ${days} 天前的日志吗？此操作不可恢复。`)) return
 
   cleaning.value = true
@@ -103,6 +106,7 @@ async function cleanOldLogs() {
     const response = await cleanAdminLogs(days)
     const result = response.data.data
     cleanMessage.value = `已清理 ${result.totalRemoved} 条旧日志，保留最近 ${result.daysToKeep} 天的记录。`
+    // 重新拉取列表，避免页面上还显示已经删除的日志行。
     await loadLogs()
   } catch (error) {
     errorMessage.value = errorText(error, '清理日志失败，请稍后重试')

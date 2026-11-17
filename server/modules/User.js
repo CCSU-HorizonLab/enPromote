@@ -11,6 +11,20 @@ let userSchema = new mongoose.Schema({
         enum: ['active', 'disabled', 'pending'],
         default: 'active'
     },
+    // 登录安全：连续失败次数与临时锁定时间
+    failedLoginAttempts: {
+        type: Number,
+        default: 0
+    },
+    lockUntil: {
+        type: Date,
+        default: null
+    },
+    // 会话版本：改密/重置密码后自增，使旧的 session 立即失效
+    authVersion: {
+        type: Number,
+        default: 0
+    },
     username: {
         type: String,
         required: true,
