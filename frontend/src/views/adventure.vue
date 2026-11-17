@@ -1440,7 +1440,10 @@ const goToStory = () => {
     })
     return
   }
-  router.push('/story')
+  router.push({
+    path: '/avg-test',
+    query: { scenarioId: `scenario_${currentChapterId.value.toLowerCase()}_01`, chapter: currentChapterId.value, from: 'adventure' }
+  })
 }
 
 const goToHotelNgPlus = () => {

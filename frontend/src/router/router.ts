@@ -78,7 +78,7 @@ const router = createRouter({
             meta: { requiresAuth: true, requiresManagementAccess: true }
         },
 
-        // 剧情模式路由
+        // 剧情模式与角色实战路由（/story 已合并入 /adventure-story）
         {
             path: '/avg-test',
             name: 'AvgTest',
@@ -87,21 +87,15 @@ const router = createRouter({
         },
         {
             path: '/story',
-            name: 'StoryMode',
-            component: () => import('../views/StoryMode_new.vue'),
-            meta: { requiresAuth: true }
+            redirect: '/adventure-story'
         },
         {
             path: '/story/:storyId',
-            name: 'StoryDetail',
-            component: () => import('../views/StoryMode_new.vue'),
-            meta: { requiresAuth: true }
+            redirect: '/adventure-story'
         },
         {
             path: '/chapter/:storyId/:chapterId',
-            name: 'ChapterView',
-            component: () => import('../views/ChapterView_new.vue'),
-            meta: { requiresAuth: true }
+            redirect: '/adventure-story'
         },
 
         // 闯关模式路由
