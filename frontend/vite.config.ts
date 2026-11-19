@@ -5,6 +5,7 @@ import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 
 // 后端地址可通过环境变量覆盖，便于同机运行多个副本时避开端口冲突。
+// 不设置时仍指向默认的 3000，正常开发不需要额外配置。
 const apiTarget = process.env.VITE_API_TARGET || 'http://localhost:3000'
 
 // https://vite.dev/config/

@@ -77,6 +77,14 @@ const router = createRouter({
             component: () => import('../views/AdminLogs.vue'),
             meta: { requiresAuth: true, requiresManagementAccess: true }
         },
+        {
+            // 审计日志和系统日志一样，仅 admin/manager 可以访问；
+            // 具体的权限仍由后端接口再次校验。
+            path: '/admin/audit',
+            name: 'AdminAuditLogs',
+            component: () => import('../views/AdminAuditLogs.vue'),
+            meta: { requiresAuth: true, requiresManagementAccess: true }
+        },
 
         // 剧情模式与角色实战路由（/story 已合并入 /adventure-story）
         {

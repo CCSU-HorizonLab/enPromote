@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const LogViewer = require('../utils/logViewer');
 const { logger, logUserAction } = require('../utils/logger');
+const { recordAuditLog } = require('../utils/auditLog');
 const { requireAdmin, requireAdminOrManager } = require('../middleware/auth');
 
 const logViewer = new LogViewer();
@@ -172,17 +173,43 @@ router.get('/level/:level', (req, res) => {
 
 // 清理旧日志
 // 清理日志会影响服务器数据，只允许 admin 执行。
-router.post('/clean', requireAdmin, (req, res) => {
+// 处理函数是 async 的：清理完成后要等审计记录真正写入数据库再返回。
+router.post('/clean', requireAdmin, async (req, res) => {
     try {
-        const { daysToKeep = 30 } = req.body;
-        logViewer.cleanOldLogs(daysToKeep);
-        
-        logUserAction(req, 'CLEAN_OLD_LOGS', { daysToKeep });
-        logger.info(`管理员清理旧日志，保留${daysToKeep}天`);
-        
+        const { daysToKeep: rawDays = 30 } = req.body || {};
+        const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 200) : '';
+        // 用 Number 而不是 parseInt：parseInt('30abc') 会得到 30，
+        // 这里希望非法输入直接报错，而不是被悄悄接受。
+        const daysToKeep = Number(rawDays);
+        if (!Number.isInteger(daysToKeep) || daysToKeep < 1 || daysToKeep > 365) {
+            return res.status(400).json({
+                code: 400,
+                message: '保留天数必须是 1 到 365 之间的整数'
+            });
+        }
+
+        const result = logViewer.cleanOldLogs(daysToKeep);
+
+        // 清理日志属于敏感操作：先同步落审计库，再告诉调用方“清理成功”，
+        // 避免出现清理完成但审计记录丢失的情况。
+        await recordAuditLog(req, 'CLEAN_OLD_LOGS', {
+            targetType: 'log',
+            reason,
+            details: {
+                daysToKeep,
+                totalRemoved: result.totalRemoved,
+                files: result.files.map(file => ({
+                    name: file.name,
+                    removed: file.entriesRemoved
+                }))
+            }
+        });
+        logger.info(`管理员清理旧日志，保留${daysToKeep}天，共删除${result.totalRemoved}条`);
+
         res.json({
             code: 200,
-            message: '清理旧日志成功'
+            message: `已清理 ${daysToKeep} 天前的日志`,
+            data: result
         });
     } catch (error) {
         logger.error('清理旧日志失败', error);

@@ -34,7 +34,7 @@ function createAuthMiddleware({ adminOnly = false, adminOrManager = false, allow
 
         try {
             // 从数据库读取最新角色和状态，避免只信任登录时保存的 session 信息。
-            const user = await User.findById(userId).select('_id username role status');
+            const user = await User.findById(userId).select('_id username role status authVersion');
             const status = user?.status || 'active';
 
             if (!user || status !== 'active') {
@@ -45,6 +45,24 @@ function createAuthMiddleware({ adminOnly = false, adminOrManager = false, allow
                 return res.status(401).json({
                     code: 401,
                     message: user ? '账号当前不可用' : '用户不存在',
+                    redirect: '/login'
+                });
+            }
+
+            // 改密/重置密码会提升 authVersion，旧会话在这里被识别并强制退出。
+            // 老用户/老会话没有这个字段，Number(undefined) || 0 会按 0 处理，保持兼容。
+            const sessionVersion = Number(req.session.authVersion) || 0;
+            const currentVersion = Number(user.authVersion) || 0;
+            if (sessionVersion !== currentVersion) {
+                // 先把失效会话从存储里删掉，再清 cookie，
+                // 避免前端继续携带一个永远无法通过校验的 session ID。
+                if (typeof req.session.destroy === 'function') {
+                    req.session.destroy(() => {});
+                }
+                res.clearCookie('sid');
+                return res.status(401).json({
+                    code: 401,
+                    message: '登录状态已失效，请重新登录',
                     redirect: '/login'
                 });
             }

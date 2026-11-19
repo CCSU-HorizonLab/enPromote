@@ -43,10 +43,32 @@ const avatarUpload = multer({
 });
 
 const SALT_ROUNDS = 10;
+const MAX_FAILED_LOGIN_ATTEMPTS = 5;
+const LOGIN_LOCK_MS = 15 * 60 * 1000;
+const loginThrottle = require('../utils/loginThrottle');
 
 // 判断是否为 bcrypt 哈希（格式 $2a$、$2b$、$2y$）
 function isBcryptHash(str) {
     return typeof str === 'string' && /^\$2[aby]\$\d{2}\$/.test(str);
+}
+
+// 用户不存在时也做一次 bcrypt 比较，避免通过响应时间判断账号是否存在。
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync('invalid-login-placeholder', SALT_ROUNDS);
+
+// 登录成功后重建 session，防止会话固定攻击：
+// 攻击者先给受害者一个已知的 session ID，如果登录后不换 ID，就能复用这个会话。
+function regenerateSession(req) {
+    return new Promise((resolve, reject) => {
+        req.session.regenerate((error) => (error ? reject(error) : resolve()));
+    });
+}
+
+// 显式保存 session，确保响应发出前新的 session ID 和登录态已经写入存储。
+// 否则浏览器可能在保存完成前就发起下一个请求，读到旧会话。
+function saveSession(req) {
+    return new Promise((resolve, reject) => {
+        req.session.save((error) => (error ? reject(error) : resolve()));
+    });
 }
 // 忘记密码 - 验证邮箱验证码并返回重置页面
 router.post('/forgot-password', async (req, res) => {
@@ -165,15 +187,23 @@ router.post('/reset-password', async (req, res) => {
             return res.json({ code: 400, message: '该邮箱未注册' });
         }
 
-        // 检查新密码是否和旧密码相同
-        const isSamePassword = await bcrypt.compare(password, user.password);
+        // 检查新密码是否和旧密码相同。
+        // 历史数据里可能是明文密码，直接 bcrypt.compare 会抛错，所以先判断格式。
+        const isSamePassword = isBcryptHash(user.password)
+            ? await bcrypt.compare(password, user.password)
+            : password === user.password;
         if (isSamePassword) {
             return res.json({ code: 400, message: '新密码不能与旧密码相同' });
         }
 
-        // 更新密码
-        const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
-        user.password = hashedPassword;
+        // 更新密码并提升 authVersion：
+        // requireAuth 每次都会比较 session 里的版本和数据库里的版本，
+        // 版本一变，所有旧会话（包括其他设备）会在下一次请求时被强制退出。
+        user.password = await bcrypt.hash(password, SALT_ROUNDS);
+        user.authVersion = (user.authVersion || 0) + 1;
+        // 重置锁定状态，避免用户刚重置完密码却还处在登录锁定期。
+        user.failedLoginAttempts = 0;
+        user.lockUntil = null;
         await user.save();
 
         logUserAction(req, 'RESET_PASSWORD_SUCCESS', { contact });
@@ -319,64 +349,128 @@ router.get('/get-contact-from-token', (req, res) => {
 });
 
 router.post('/login', async (req, res) => {
-    let username, password;
-    try {
-        ({ username, password } = req.body);
-    } catch (err) {
-        logApiError(req, err, 400);
-        return res.json({ code: 400, message: '错误的请求格式，请求体结构缺失' });
+    const { username, password } = req.body || {};
+    // 去掉首尾空格：用户从别处复制用户名时经常带空格，之前会被当成不存在的账号。
+    const loginName = typeof username === 'string' ? username.trim() : '';
+
+    // 所有登录失败都返回同一句提示，避免泄露“账号是否存在”。
+    // 注意这里保持 HTTP 200 + 业务 code：前端的 axios 拦截器会把 401
+    // 当成会话过期并跳转登录页，登录接口返回 401 会造成循环跳转。
+    if (!loginName || typeof password !== 'string' || !password) {
+        return res.json({ code: 400, message: '用户名或密码错误' });
+    }
+
+    const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
+
+    // 第一层：IP 级限流，先挡住明显的暴力尝试（覆盖用户名不存在的情况）。
+    if (loginThrottle.isBlocked(clientIp)) {
+        logUserAction(req, 'LOGIN_BLOCKED', { username: loginName, reason: 'IP 登录尝试过多' });
+        return res.json({ code: 429, message: '登录尝试次数过多，请稍后再试' });
     }
 
     try {
-        const user = await User.findOne({ username });
+        const user = await User.findOne({ username: loginName });
+        const now = Date.now();
 
         if (!user) {
-            logUserAction(req, 'LOGIN_FAILED', { username, reason: '用户不存在' });
-            return res.json({ code: 400, message: '用户不存在' });
+            // 仍然执行一次 bcrypt 比较，让“用户不存在”和“密码错误”的耗时接近，
+            // 避免攻击者通过响应时间判断账号是否存在。
+            await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
+            loginThrottle.recordFailure(clientIp);
+            logUserAction(req, 'LOGIN_FAILED', { username: loginName, reason: '账号或密码错误' });
+            return res.json({ code: 400, message: '用户名或密码错误' });
+        }
+
+        // 第二层：账号级锁定。连续失败次数和锁定截止时间持久化在 User 上，
+        // 即使服务重启也不会被清零。
+        if (user.lockUntil && user.lockUntil.getTime() > now) {
+            loginThrottle.recordFailure(clientIp);
+            logUserAction(req, 'LOGIN_FAILED', {
+                username: loginName,
+                userId: user._id,
+                reason: '账号已临时锁定'
+            });
+            return res.json({ code: 429, message: '登录尝试次数过多，请稍后再试' });
         }
 
         let passwordValid = false;
+        let passwordNeedsMigration = false;
+
         if (isBcryptHash(user.password)) {
             passwordValid = await bcrypt.compare(password, user.password);
-            // 登录成功时，若之前是明文密码已通过下方兼容逻辑迁移，此处不会执行
-        } else {
-            // 兼容旧数据：明文密码，验证后迁移为 bcrypt 哈希
-            if (password === user.password) {
-                passwordValid = true;
-                user.password = await bcrypt.hash(password, SALT_ROUNDS);
-                await user.save();
-                logger.info(`用户 ${username} 密码已迁移为 bcrypt 哈希`);
-            }
+        } else if (password === user.password) {
+            // 兼容历史数据里的明文密码：本次验证通过后会在下面改成 bcrypt 哈希。
+            passwordValid = true;
+            passwordNeedsMigration = true;
         }
 
-        if (passwordValid) {
-            const accountStatus = user.status || 'active';
-            if (accountStatus !== 'active') {
-                logUserAction(req, 'LOGIN_FAILED', { username, userId: user._id, reason: `账号状态：${accountStatus}` });
-                return res.json({
-                    code: 403,
-                    message: accountStatus === 'disabled' ? '账号已被禁用，无法登录' : '账号当前不可登录'
-                });
+        if (!passwordValid) {
+            const attempts = (user.failedLoginAttempts || 0) + 1;
+            const lockUntil = attempts >= MAX_FAILED_LOGIN_ATTEMPTS
+                ? new Date(now + LOGIN_LOCK_MS)
+                : null;
+
+            // 用 updateOne 只更新计数字段，避免 user.save() 重新校验/写入无关字段。
+            await User.updateOne(
+                { _id: user._id },
+                { $set: { failedLoginAttempts: attempts, lockUntil } }
+            );
+            loginThrottle.recordFailure(clientIp);
+            logUserAction(req, 'LOGIN_FAILED', {
+                username: loginName,
+                userId: user._id,
+                reason: '密码错误',
+                attempts
+            });
+
+            if (lockUntil) {
+                logger.warn(`账号 ${loginName} 连续登录失败 ${attempts} 次，已临时锁定`);
+                return res.json({ code: 429, message: '登录尝试次数过多，请稍后再试' });
             }
-
-            // 确保 session 存在
-            if (!req.session) {
-                req.session = {};
-            }
-
-            // 直接更新会话信息
-            req.session.userid = user._id;
-            req.session.isLogin = true;
-            req.session.username = username;
-
-            logUserAction(req, 'LOGIN_SUCCESS', { username, userId: user._id });
-            logger.info(`用户登录成功: ${username}`);
-
-            return res.json({ code: 200, message: '登录成功' });
-        } else {
-            logUserAction(req, 'LOGIN_FAILED', { username, reason: '密码错误' });
-            return res.json({ code: 400, message: '密码错误' });
+            return res.json({ code: 400, message: '用户名或密码错误' });
         }
+
+        // 密码正确后再检查账号状态，避免在密码错误时透露账号是否被禁用。
+        const accountStatus = user.status || 'active';
+        if (accountStatus !== 'active') {
+            logUserAction(req, 'LOGIN_FAILED', {
+                username: loginName,
+                userId: user._id,
+                reason: `账号状态：${accountStatus}`
+            });
+            return res.json({
+                code: 403,
+                message: accountStatus === 'disabled' ? '账号已被禁用，无法登录' : '账号当前不可登录'
+            });
+        }
+
+        // 登录成功：清零失败计数（只在确实有计数时写库），必要时迁移明文密码。
+        if (user.failedLoginAttempts || user.lockUntil) {
+            await User.updateOne(
+                { _id: user._id },
+                { $set: { failedLoginAttempts: 0, lockUntil: null } }
+            );
+        }
+        if (passwordNeedsMigration) {
+            const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+            await User.updateOne({ _id: user._id }, { $set: { password: hashedPassword } });
+            logger.info(`用户 ${user.username} 密码已迁移为 bcrypt 哈希`);
+        }
+
+        // 重建 session：旧的 session ID 作废，新的 ID 携带登录态和会话版本。
+        // authVersion 用于以后改密时让“其他设备”的旧会话失效。
+        await regenerateSession(req);
+        req.session.userid = user._id;
+        req.session.isLogin = true;
+        req.session.username = user.username;
+        req.session.authVersion = user.authVersion || 0;
+        await saveSession(req);
+
+        loginThrottle.clear(clientIp);
+        logUserAction(req, 'LOGIN_SUCCESS', { username: user.username, userId: user._id });
+        logger.info(`用户登录成功: ${user.username}`);
+
+        return res.json({ code: 200, message: '登录成功' });
     } catch (error) {
         logApiError(req, error, 500);
         return res.json({ code: 500, message: '服务器内部错误' });
@@ -793,6 +887,14 @@ router.post('/changeinfo', async (req, res) => {
             return res.json({ code: 404, message: '用户不存在' });
         }
 
+        // 修改密码时提升会话版本：其他设备的旧会话立即失效，
+        // 当前会话在下面同步为新版本，避免把自己也踢下线。
+        if (updateData.password) {
+            updateData.authVersion = (user.authVersion || 0) + 1;
+            updateData.failedLoginAttempts = 0;
+            updateData.lockUntil = null;
+        }
+
         // 确保用户有chapters字段
         if (!user.chapters || user.chapters.size === 0) {
             user.chapters = new Map([
@@ -830,6 +932,12 @@ router.post('/changeinfo', async (req, res) => {
 
         if (!updatedUser) {
             return res.json({ code: 404, message: '用户不存在' });
+        }
+
+        // 密码变更后同步当前会话的版本，其他会话仍会在鉴权中间件里失效。
+        if (updateData.password) {
+            req.session.authVersion = updatedUser.authVersion || 0;
+            await saveSession(req);
         }
 
 

@@ -69,9 +69,10 @@ export function getAdminUser(userId: string) {
 }
 
 // 状态接口只接受启用/禁用；管理员角色不能从这个 API 修改。
-export function setAdminUserStatus(userId: string, status: 'active' | 'disabled') {
+// reason 会写入审计日志，便于事后追溯。
+export function setAdminUserStatus(userId: string, status: 'active' | 'disabled', reason = '') {
   return request.patch<ApiEnvelope<AdminUser>>(
     `/admin/users/${encodeURIComponent(userId)}/status`,
-    { status }
+    { status, reason }
   )
 }

@@ -10,6 +10,7 @@
       </div>
       <div class="heading-actions">
         <router-link class="back-link" to="/admin/logs">查看日志</router-link>
+        <router-link class="back-link" to="/admin/audit">审计日志</router-link>
         <router-link class="back-link" to="/">返回学习平台</router-link>
       </div>
     </section>
@@ -309,11 +310,14 @@ async function toggleStatus(account: AdminUser) {
   const nextStatus: 'active' | 'disabled' = account.status === 'disabled' ? 'active' : 'disabled'
   const actionLabel = nextStatus === 'disabled' ? '禁用' : '启用'
   if (!window.confirm(`确定${actionLabel}用户“${account.username}”吗？`)) return
+  // 原因会写入审计日志；取消输入框则放弃这次操作。
+  const reason = window.prompt(`请填写${actionLabel}原因（可选，会记录到审计日志）`, '')
+  if (reason === null) return
 
   pendingUserId.value = account._id
   errorMessage.value = ''
   try {
-    const response = await setAdminUserStatus(account._id, nextStatus)
+    const response = await setAdminUserStatus(account._id, nextStatus, reason.trim())
     const updatedStatus = response.data.data.status as AdminUserStatus
     const target = users.value.find(item => item._id === account._id)
     if (target) target.status = updatedStatus
