@@ -1,0 +1,138 @@
+# ==========================================
+# enPromote 一键化 Docker 编排配置
+# 涵盖: 前端 (Vue 3 + Nginx) + 后端 (Node Express) + 数据库 (MongoDB) + 缓存 (Redis)
+# ==========================================
+services:
+  # ----------------------------------------
+  # 1. 数据库服务: MongoDB 7.0
+  # ----------------------------------------
+  mongodb:
+    image: mongo:7.0
+    container_name: enpromote-mongodb
+    restart: unless-stopped
+    ports:
+      - "${MONGODB_PORT:-27017}:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - enpromote-network
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval \"db.adminCommand('ping')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ----------------------------------------
+  # 2. 缓存服务: Redis 7.0 (开启 AOF 持久化)
+  # ----------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: enpromote-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - enpromote-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ----------------------------------------
+  # 3. 后端 API 服务: Express 5 + Node 20
+  # ----------------------------------------
+  server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: enpromote-server
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - path: ../.env
+        required: false
+      - path: .env.docker
+        required: false
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - DB_URL=mongodb://mongodb:27017/EnglishMastery
+      - MONGO_URL=mongodb://mongodb:27017/session
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SESSION_SECRET=${SESSION_SECRET:-enpromote_super_secret_session_key_2026}
+      # AI 模型服务密钥（可从 .env 自动继承）
+      - AI_BASE_URL=${AI_BASE_URL:-https://api.deepseek.com}
+      - AI_API_KEY=${AI_API_KEY:-}
+      - ALIYUN_API_KEY=${ALIYUN_API_KEY:-}
+      - GOOGLE_GENERATIVE_AI_API_KEY=${GOOGLE_GENERATIVE_AI_API_KEY:-}
+    ports:
+      - "${SERVER_PORT:-3000}:3000"
+    volumes:
+      # 持久化用户上传头像与静态资源
+      - avatars_data:/app/public/avatars
+      # 持久化应用运行日志
+      - server_logs:/app/server/logs
+    networks:
+      - enpromote-network
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3000/', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ----------------------------------------
+  # 4. 前端 Web 服务: Nginx + Vue 3 SPA 打包产物
+  # ----------------------------------------
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    container_name: enpromote-frontend
+    restart: unless-stopped
+    depends_on:
+      server:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    networks:
+      - enpromote-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/healthz || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+# ------------------------------------------
+# 数据持久化卷定义
+# ------------------------------------------
+volumes:
+  mongodb_data:
+    name: enpromote_mongodb_data
+  redis_data:
+    name: enpromote_redis_data
+  avatars_data:
+    name: enpromote_avatars_data
+  server_logs:
+    name: enpromote_server_logs
+
+# ------------------------------------------
+# 独立内部网桥
+# ------------------------------------------
+networks:
+  enpromote-network:
+    name: enpromote-network
+    driver: bridge

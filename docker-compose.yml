@@ -1,0 +1,7 @@
+# ==========================================
+# enPromote 根目录 Docker Compose 快捷入口
+# 允许直接在项目根目录执行: docker compose up -d
+# 实际编排定义位于: docker/docker-compose.yml
+# ==========================================
+include:
+  - path: docker/docker-compose.yml
